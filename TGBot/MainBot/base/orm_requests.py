@@ -110,8 +110,8 @@ class UserMethods:
         if 'age' in state_data and isinstance(state_data['age'], datetime):
             state_data['age'] = state_data['age'].isoformat()
         data = await self.api.complete_registration(
+            user_id=user.id,
             user_data={
-                'user_id': user.id,
                 'state_data': state_data,
                 'rollback': rollback
             }
@@ -335,9 +335,7 @@ class Sigma_BoostsMethods:
         user: Users
         ) -> Optional[Users]:
         data = await self.api.add_passive_income(
-            user_data={
-                'user_id': user.id
-                }
+            user_id=user.id
             )
         return Users(**data['user']) if data else None
 
@@ -394,8 +392,8 @@ class Lumberjack_GameMethods:
         grid: List
         ) -> Optional[Lumberjack_Game]:
         data = await self.api.update_grid(
+            game_user_id=game_user_id,
             user_data = {
-                'game_user_id': game_user_id,
                 'grid': grid
             }
         )
@@ -422,9 +420,7 @@ class Lumberjack_GameMethods:
         game_user_id: int
         ) -> Dict:
         return await self.api.update_energy(
-            user_data={
-                'game_user_id': game_user_id
-            }
+            game_user_id=game_user_id
         )
 
     async def refresh_energy(
@@ -477,9 +473,7 @@ class GeoHunter_GameMethods:
         game_user: GeoHunter
         ) -> Dict:
         return await self.api.update_energy(
-            user_data={
-                'game_user_id': game_user.id
-            }
+            game_user_id=game_user.id
         )
 
     async def refresh_energy(
@@ -868,8 +862,8 @@ class InteractiveGameMethods:
         winers: List[str]
         ) -> Optional[InteractiveGameAllInfo]:
         game = await self.api.end_game(
+            game_id,
             data={
-                'game_id': game_id,
                 'winers': winers
             }
         )

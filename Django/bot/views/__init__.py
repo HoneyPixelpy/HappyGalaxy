@@ -71,22 +71,22 @@ class SigmaBoostsViewSet(ViewSet):
             status=status.HTTP_200_OK
             )
 
-    # POST /api/v1/sigma-boosts/add_passive_income/
-    @action(detail=False, methods=['post']) # , url_path='add-passive-income'
+    # PATCH /api/v1/sigma-boosts/{user_id}/add_passive_income/
+    @action(detail=True, methods=['patch']) # , url_path='add-passive-income'
     @queue_request
-    def add_passive_income(self, request):
+    def add_passive_income(self, request, pk=None):
         """
         Начисляет пассивный доход пользователю
         """
-        user_id = QueryData.check_params(request, 'user_id')
+        # user_id = QueryData.check_params(request, 'user_id')
 
-        user = UserMethods.get(pk=user_id)
+        user = UserMethods.get(pk=pk)
         boosts_user = SigmaBoostsMethods.get(user=user)
         
         return SigmaBoostsMethods.passive_income_calculation(user, boosts_user)
     
-    # POST /api/v1/sigma-boosts/upgrade_boost/
-    @action(detail=False, methods=['post']) # , url_path='upgrade-boost'
+    # PATCH /api/v1/sigma-boosts/upgrade_boost/?user_id=123&name=asdfas
+    @action(detail=False, methods=['patch']) # , url_path='upgrade-boost'
     @queue_request
     def upgrade_boost(self, request):
         """
@@ -164,22 +164,22 @@ class LumberjackGameViewSet(ViewSet):
         
         return LumberjackGameMethods.refresh_energy(game_user, user_boosts)
 
-    # POST /api/v1/lumberjack-games/update_grid/
-    @action(detail=False, methods=['post']) # , url_path='update-grid'
+    # PATCH /api/v1/lumberjack-games/{game_user_id}/update_grid/
+    @action(detail=True, methods=['patch']) # , url_path='update-grid'
     @queue_request
-    def update_grid(self, request):
+    def update_grid(self, request, pk=None):
         """
         Обновляет игровое поле пользователя
         """
-        game_user_id = QueryData.check_params(request, 'game_user_id')
+        # game_user_id = QueryData.check_params(request, 'game_user_id')
         grid = QueryData.check_params(request, 'grid')
         
-        game_user = LumberjackGameMethods.get(pk=game_user_id)
+        game_user = LumberjackGameMethods.get(pk=pk)
         
         return LumberjackGameMethods.update_grid(game_user, grid)
 
-    # POST /api/v1/lumberjack-games/process_click/
-    @action(detail=False, methods=['post']) # , url_path='process-click'
+    # PATCH /api/v1/lumberjack-games/process_click/
+    @action(detail=False, methods=['patch']) # , url_path='process-click'
     @queue_request
     def process_click(self, request):
         """
@@ -206,16 +206,16 @@ class LumberjackGameViewSet(ViewSet):
             col
         )
 
-    # POST /api/v1/lumberjack-games/restore_energy/
-    @action(detail=False, methods=['post']) # , url_path='restore-energy'
+    # PATCH /api/v1/lumberjack-games/{game_user_id}/restore_energy/
+    @action(detail=True, methods=['patch']) # , url_path='restore-energy'
     @queue_request
-    def restore_energy(self, request):
+    def restore_energy(self, request, pk=None):
         """
         Полностью восстанавливает энергию игрока
         """
-        game_user_id = QueryData.check_params(request, 'game_user_id')
+        # game_user_id = QueryData.check_params(request, 'game_user_id')
 
-        game_user = LumberjackGameMethods.get(pk=game_user_id)
+        game_user = LumberjackGameMethods.get(pk=pk)
         game_user_two = GeoHunterMethods.get(user=game_user.user)
         
         return LumberjackGameMethods.restore_energy(game_user, game_user_two)
@@ -259,16 +259,16 @@ class GeoHunterGameViewSet(ViewSet):
 
         return GeoHunterMethods.refresh_energy(game_user, user_boosts)
 
-    # POST /api/v1/geo-hunter/process_click/
-    @action(detail=False, methods=['post']) # , url_path='process-click'
-    # @queue_request
+    # PATCH /api/v1/geo-hunter/process_click/
+    @action(detail=False, methods=['patch']) # , url_path='process-click'
+    @queue_request
     def process_click(self, request):
         """
         Обрабатывает клик в игре с учетом всех бустов и обновляет состояние
         """
         user_id = QueryData.check_params(request, 'user_id')
         energy_in_click = QueryData.check_params(request, 'energy_in_click')
-        user_choice = request.data.get("user_choice")
+        user_choice = QueryData.check_params(request, "user_choice")
         logger.debug(user_id)
         logger.debug(energy_in_click)
         logger.debug(user_choice)
@@ -293,16 +293,16 @@ class GeoHunterGameViewSet(ViewSet):
             status=status.HTTP_200_OK
             )
 
-    # POST /api/v1/geo-hunter/restore_energy/
-    @action(detail=False, methods=['post']) # , url_path='restore-energy'
+    # PATCH /api/v1/geo-hunter/{game_user_id}/restore_energy/
+    @action(detail=False, methods=['patch']) # , url_path='restore-energy'
     @queue_request
-    def restore_energy(self, request):
+    def restore_energy(self, request, pk=None):
         """
         Полностью восстанавливает энергию игрока
         """
-        game_user_id = QueryData.check_params(request, 'game_user_id')
+        # game_user_id = QueryData.check_params(request, 'game_user_id')
 
-        game_user = GeoHunterMethods.get(pk=game_user_id)
+        game_user = GeoHunterMethods.get(pk=pk)
         game_user_two = LumberjackGameMethods.get(user=game_user.user)
             
         return GeoHunterMethods.restore_energy(game_user, game_user_two)
@@ -448,19 +448,18 @@ class UserViewSet(ViewSet):
             status=status.HTTP_200_OK
             )
 
-    # POST /api/v1/users/complete_registration/
-    @action(detail=False, methods=['post']) # , url_path='complete-registration'
+    # PUT /api/v1/users/{user_id}/complete_registration/
+    @action(detail=True, methods=['put']) # , url_path='complete-registration'
     @queue_request
-    def complete_registration(self, request):
+    def complete_registration(self, request, pk=None):
         """
         Завершает регистрацию пользователя и инициализирует игровые данные
-        POST /api/v1/users/complete-registration/
         """
-        user_id = QueryData.check_params(request, 'user_id')
+        # user_id = QueryData.check_params(request, 'user_id')
         state_data = QueryData.check_params(request, 'state_data')
-        rollback = request.data.get("rollback")
+        rollback = QueryData.check_params(request, "rollback")
         
-        user = UserMethods.get(pk=user_id)
+        user = UserMethods.get(pk=pk)
                 
         return UserMethods.complete_registration(
             user, 
@@ -468,8 +467,8 @@ class UserViewSet(ViewSet):
             rollback
             )
 
-    # POST /api/v1/users/update_telegram_username/
-    @action(detail=False, methods=['post']) # , url_path='update-telegram-username'
+    # PATCH /api/v1/users/update_telegram_username/?user_id=1&username=superuser
+    @action(detail=False, methods=['patch']) # , url_path='update-telegram-username'
     @queue_request
     def update_telegram_username(self, request):
         """
@@ -482,8 +481,8 @@ class UserViewSet(ViewSet):
         
         return UserMethods.update_telegram_username(user, username)
 
-    # POST /api/v1/users/update_balance/
-    @action(detail=False, methods=['post']) # , url_path='update-balance'
+    # PATCH /api/v1/users/update_balance/?user_id=1&new_balance=1000
+    @action(detail=False, methods=['patch']) # , url_path='update-balance'
     @queue_request
     def update_balance(self, request):
         """
@@ -496,8 +495,8 @@ class UserViewSet(ViewSet):
         
         return UserMethods.update_balance(user, new_balance)
 
-    # POST /api/v1/users/update_ban/
-    @action(detail=False, methods=['post']) # , url_path='update_ban'
+    # PATCH /api/v1/users/update_ban/?user_id=1&ban=True
+    @action(detail=False, methods=['patch']) # , url_path='update_ban'
     @queue_request
     def update_ban(self, request):
         """
@@ -523,8 +522,8 @@ class UserViewSet(ViewSet):
         
         return ReferralConnectionsMethods.process_referral(user)
 
-    # POST /api/v1/users/update_vk_id/
-    @action(detail=False, methods=['post']) # , url_path='update-vk-id'
+    # PATCH /api/v1/users/update_vk_id/?user_id=1&vk_id=1
+    @action(detail=False, methods=['patch']) # , url_path='update-vk-id'
     @queue_request
     def update_vk_id(self, request):
         """
@@ -548,8 +547,8 @@ class UserViewSet(ViewSet):
         """
         return UserMethods.get_all_vk_users()
 
-    # POST /api/v1/users/back_vk_id/
-    @action(detail=False, methods=['post']) # , url_path='update-vk-id'
+    # DELETE /api/v1/users/back_vk_id/?user_id=1&chat_id_name=1
+    @action(detail=False, methods=['delete']) # , url_path='update-vk-id'
     @queue_request
     def back_vk_id(self, request):
         """
@@ -675,8 +674,8 @@ class PurchasesViewSet(ViewSet):
         
         return PurchasesMethods.user_purchases(user, completed)
 
-    # POST /api/v1/purchases/confirm_purchase/
-    @action(detail=False, methods=['post']) # , url_path='confirm-purchase'
+    # PATCH /api/v1/purchases/confirm_purchase/?task_id=456
+    @action(detail=False, methods=['patch']) # , url_path='confirm-purchase'
     @queue_request
     def confirm_purchase(self, request):
         """
@@ -740,8 +739,8 @@ class WorkKeysViewSet(ViewSet):
             status=status.HTTP_200_OK
             )
 
-    # POST /api/v1/work-keys/register_with_key/
-    @action(detail=False, methods=['post']) # , url_path='register-with-key'
+    # PATCH /api/v1/work-keys/register_with_key/?user_id=456&key=asd123
+    @action(detail=False, methods=['patch']) # , url_path='register-with-key'
     @queue_request
     def register_with_key(self, request):
         """
@@ -973,8 +972,8 @@ class UseQuestsViewSet(ViewSet):
 
         return UseQuestMethods.create_idea_daily(user, quest)
 
-    # POST /api/v1/use-quests/success_idea_daily/
-    @action(detail=False, methods=['post'])
+    # PATCH /api/v1/use-quests/success_idea_daily/?user_id=123&quest_id=123
+    @action(detail=False, methods=['patch'])
     @queue_request
     def success_idea_daily(self, request):
         user_id = QueryData.check_params(request, 'user_id')
@@ -989,8 +988,8 @@ class UseQuestsViewSet(ViewSet):
 
         return Quest_MA_Methods.success_idea_daily(user, quest, use_quest_obj)
 
-    # POST /api/v1/use-quests/delete_idea/
-    @action(detail=False, methods=['post'])
+    # DELETE /api/v1/use-quests/delete_idea/?user_id=123&quest_id=123
+    @action(detail=False, methods=['delete'])
     @queue_request
     def delete_idea(self, request):
         user_id = QueryData.check_params(request, 'user_id')
@@ -1025,8 +1024,8 @@ class UseQuestsViewSet(ViewSet):
 
         return UseQuestMethods.sub_vk_chat(quest)
 
-    # POST /api/v1/use-quests/back_tg_quest/
-    @action(detail=False, methods=['post'])
+    # DELETE /api/v1/use-quests/back_tg_quest/?user_id=123&quest_id=123
+    @action(detail=False, methods=['delete'])
     @queue_request
     def back_tg_quest(self, request):
         user_id = QueryData.check_params(request, 'user_id')
@@ -1064,8 +1063,8 @@ class RangsViewSet(ViewSet):
 
 class QuestModerationAttemptViewSet(ViewSet):
 
-    # GET /api/v1/quest-moderation-attempt/delete_old_quest/
-    @action(detail=False, methods=['get'])
+    # POST /api/v1/quest-moderation-attempt/delete_old_quest/
+    @action(detail=False, methods=['post'])
     @queue_request
     def delete_old_quest(self, request):
         return Quest_MA_Methods.delete_old_quest()
@@ -1167,21 +1166,21 @@ class InteractiveGameViewSet(ViewSet):
         
         return InteractiveGameMethods.invite_game(user, game)
 
-    # POST /api/v1/interactive-game/delete_pending/
-    @action(detail=False, methods=['post'])
+    # DELETE /api/v1/interactive-game/{game_id}/delete_pending/
+    @action(detail=True, methods=['delete'])
     @queue_request
-    def delete_pending(self, request):
-        game_id = QueryData.check_params(request, 'game_id')
-        game = InteractiveGameMethods.get(pk=game_id)
+    def delete_pending(self, request, pk=None):
+        # game_id = QueryData.check_params(request, 'game_id')
+        game = InteractiveGameMethods.get(pk=pk)
 
         return InteractiveGameMethods.delete_pending(game)
 
-    # POST /api/v1/interactive-game/start_game/
-    @action(detail=False, methods=['post'])
+    # PATCH /api/v1/interactive-game/{game_id}/start_game/
+    @action(detail=True, methods=['patch'])
     @queue_request
-    def start_game(self, request):
-        game_id = QueryData.check_params(request, 'game_id')
-        game = InteractiveGameMethods.get(pk=game_id)
+    def start_game(self, request, pk=None):
+        # game_id = QueryData.check_params(request, 'game_id')
+        game = InteractiveGameMethods.get(pk=pk)
 
         return InteractiveGameMethods.start_game(game)
 
@@ -1196,16 +1195,16 @@ class InteractiveGameViewSet(ViewSet):
         
         return InteractiveGameMethods.get_info(game, serializer_game)
 
-    # POST /api/v1/interactive-game/end_game/
-    @action(detail=False, methods=['post'])
+    # PATCH /api/v1/interactive-game/{game_id}/end_game/
+    @action(detail=True, methods=['patch'])
     @queue_request
-    def end_game(self, request):
-        game_id = QueryData.check_params(request, 'game_id')
+    def end_game(self, request, pk=None):
+        # game_id = QueryData.check_params(request, 'game_id')
         winers = QueryData.check_params(request, 'winers')
         
         winers = [int(winer) for winer in winers]
         
-        game = InteractiveGameMethods.get(pk=game_id)
+        game = InteractiveGameMethods.get(pk=pk)
         
         return InteractiveGameMethods.end_game(game, winers)
 

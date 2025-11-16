@@ -165,35 +165,59 @@ class UsersRequests(DjangoAPI):
             }
         )
 
-    async def complete_registration(self, user_data: Dict) -> Optional[Dict]:
-        return await self._make_request("POST", "/users/complete_registration/", user_data)
+    async def complete_registration(self, user_id, user_data: Dict) -> Optional[Dict]:
+        return await self._make_request(
+            "PUT", 
+            f"/users/{user_id}/complete_registration/", 
+            user_data
+            )
 
     async def update_username(self, user_data: Dict) -> Optional[Dict]:
-        return await self._make_request("POST", "/users/update_telegram_username/", user_data)
+        return await self._make_request(
+            "PATCH", 
+            "/users/update_telegram_username/", 
+            user_data
+            )
 
     async def update_balance(self, user_data: Dict) -> Optional[Dict]:
-        return await self._make_request("POST", "/users/update_balance/", user_data)
+        return await self._make_request(
+            "PATCH", 
+            "/users/update_balance/", 
+            user_data
+            )
 
     async def update_ban(self, user_data: Dict) -> Optional[Dict]:
-        return await self._make_request("POST", "/users/update_ban/", user_data)
+        return await self._make_request(
+            "PATCH", 
+            "/users/update_ban/", 
+            user_data
+            )
 
     async def process_referral(self, user_data: Dict) -> Optional[Dict]:
         return await self._make_request("POST", "/users/process_referral/", user_data)
 
     async def update_vk_id(self, user_data: Dict) -> Optional[Dict]:
-        return await self._make_request("POST", "/users/update_vk_id/", user_data)
+        return await self._make_request(
+            "PATCH", 
+            "/users/update_vk_id/", 
+            user_data
+            )
 
     async def get_all_vk_users(self) -> Optional[Dict]:
         return await self._make_request("GET", f"/users/get_all_vk_users/")
 
     async def back_vk_id(self, user_data: Dict) -> Optional[Dict]:
-        return await self._make_request("POST", "/users/back_vk_id/", user_data)
+        return await self._make_request(
+            "DELETE", 
+            "/users/back_vk_id/", 
+            user_data
+            )
 
     async def active_users(self, data: Dict) -> Optional[Dict]:
         return await self._make_request(
             "GET", 
             "/users/active_users/",
-            params=data
+            data
             )
 
 
@@ -238,7 +262,11 @@ class PurchasesRequests(DjangoAPI):
         return await self._make_request("GET", f"/purchases/{id}/")
 
     async def confirm_purchase(self, user_data: Dict) -> Optional[Dict]:
-        return await self._make_request("POST", "/purchases/confirm_purchase/", user_data)
+        return await self._make_request(
+            "PATCH", 
+            "/purchases/confirm_purchase/", 
+            user_data
+            )
 
 
 class Pikmi_ShopRequests(DjangoAPI):
@@ -261,11 +289,18 @@ class Sigma_BoostsRequests(DjangoAPI):
             }
         )
 
-    async def add_passive_income(self, user_data: Dict) -> Optional[Dict]:
-        return await self._make_request("POST", "/sigma-boosts/add_passive_income/", user_data)
+    async def add_passive_income(self, user_id) -> Optional[Dict]:
+        return await self._make_request(
+            "PATCH", 
+            f"/sigma-boosts/{user_id}/add_passive_income/"
+            )
 
     async def upgrade_boost(self, user_data: Dict) -> Optional[Dict]:
-        return await self._make_request("POST", "/sigma-boosts/upgrade_boost/", user_data)
+        return await self._make_request(
+            "PATCH", 
+            "/sigma-boosts/upgrade_boost/", 
+            user_data
+            )
 
     async def calculate_recovery_time(self, user_id: int) -> Optional[Dict]:
         return await self._make_request(
@@ -285,14 +320,25 @@ class Lumberjack_GameRequests(DjangoAPI):
     async def get_active_games(self) -> Optional[Dict]:
         return await self._make_request("GET", "/lumberjack-games/active_games/")
 
-    async def update_grid(self, user_data: Dict) -> Optional[Dict]:
-        return await self._make_request("POST", "/lumberjack-games/update_grid/", user_data)
+    async def update_grid(self, game_user_id, user_data: Dict) -> Optional[Dict]:
+        return await self._make_request(
+            "PATCH", 
+            f"/lumberjack-games/{game_user_id}/update_grid/", 
+            user_data
+            )
 
     async def process_click(self, user_data: Dict) -> Optional[Dict]:
-        return await self._make_request("POST", "/lumberjack-games/process_click/", user_data)
+        return await self._make_request(
+            "PATCH", 
+            "/lumberjack-games/process_click/", 
+            user_data
+            )
 
-    async def update_energy(self, user_data: Dict) -> Optional[Dict]:
-        return await self._make_request("POST", "/lumberjack-games/restore_energy/", user_data)
+    async def update_energy(self, game_user_id) -> Optional[Dict]:
+        return await self._make_request(
+            "PATCH", 
+            f"/lumberjack-games/{game_user_id}/restore_energy/"
+            )
 
     async def refresh_energy(self, user_id: int) -> Optional[Dict]:
         return await self._make_request(
@@ -313,10 +359,17 @@ class GeoHunter_GameRequests(DjangoAPI):
         return await self._make_request("GET", "/geo-hunter/active_games/")
 
     async def process_click(self, user_data: Dict) -> Optional[Dict]:
-        return await self._make_request("POST", "/geo-hunter/process_click/", user_data)
+        return await self._make_request(
+            "PATCH", 
+            "/geo-hunter/process_click/", 
+            user_data
+            )
 
-    async def update_energy(self, user_data: Dict) -> Optional[Dict]:
-        return await self._make_request("POST", "/geo-hunter/restore_energy/", user_data)
+    async def update_energy(self, game_user_id) -> Optional[Dict]:
+        return await self._make_request(
+            "PATCH", 
+            f"/geo-hunter/{game_user_id}/restore_energy/"
+            )
 
     async def refresh_energy(self, user_id: int) -> Optional[Dict]:
         return await self._make_request(
@@ -343,7 +396,11 @@ class Work_KeysRequests(DjangoAPI):
         )
 
     async def register_with_key(self, user_data: Dict) -> Optional[Dict]:
-        return await self._make_request("POST", "/work-keys/register_with_key/", user_data)
+        return await self._make_request(
+            "PATCH", 
+            "/work-keys/register_with_key/", 
+            user_data
+            )
 
 
 class BonusesRequests(DjangoAPI):
@@ -436,16 +493,28 @@ class UseQuestsRequests(DjangoAPI):
             )
 
     async def back_tg_quest(self, user_data: Dict) -> Optional[Dict]:
-        return await self._make_request("POST", "/use-quests/back_tg_quest/", user_data)
+        return await self._make_request(
+            "DELETE", 
+            "/use-quests/back_tg_quest/", 
+            user_data
+            )
 
     async def create_idea_daily(self, user_data: Dict) -> Optional[Dict]:
         return await self._make_request("POST", "/use-quests/create_idea_daily/", user_data)
 
     async def success_idea_daily(self, user_data: Dict) -> Optional[Dict]:
-        return await self._make_request("POST", "/use-quests/success_idea_daily/", user_data)
+        return await self._make_request(
+            "PATCH", 
+            "/use-quests/success_idea_daily/", 
+            user_data
+            )
 
     async def delete_quest(self, user_data: Dict) -> Optional[Dict]:
-        return await self._make_request("POST", "/use-quests/delete_idea/", user_data)
+        return await self._make_request(
+            "DELETE", 
+            "/use-quests/delete_idea/", 
+            user_data
+            )
 
 
 class CopyBaseRequests(DjangoAPI):
@@ -527,20 +596,14 @@ class InteractiveGameRequests(DjangoAPI):
 
     async def delete_pending(self, game_id: int) -> Optional[Dict]:
         return await self._make_request(
-            "POST", 
-            "/interactive-game/delete_pending/",
-            data={
-                'game_id': game_id
-            }
+            "DELETE", 
+            f"/interactive-game/{game_id}/delete_pending/"
         )
 
     async def start_game(self, game_id: int) -> Optional[Dict]:
         return await self._make_request(
-            "POST", 
-            "/interactive-game/start_game/",
-            data={
-                'game_id': game_id
-            }
+            "PATCH", 
+            f"/interactive-game/{game_id}/start_game/"
         )
 
     async def get_info(self, game_id: int) -> Optional[Dict]:
@@ -552,9 +615,9 @@ class InteractiveGameRequests(DjangoAPI):
             }
         )
 
-    async def end_game(self, data: Dict) -> Optional[Dict]:
+    async def end_game(self, game_id, data: Dict) -> Optional[Dict]:
         return await self._make_request(
-            "POST", 
-            "/interactive-game/end_game/",
-            data=data
+            "PATCH", 
+            f"/interactive-game/{game_id}/end_game/",
+            data
         )
