@@ -1,0 +1,92 @@
+{
+    "First": {
+        "topic_id": 4795,
+        "messages": [
+            {
+                "type": "text",
+                "message_key": "<b>🌍 Земля затихла в ожидании перемен…</b>",
+                "time": 3
+            },
+            {
+                "type": "text",
+                "message_key": "<b>📡 Индикаторы поймали странный сигнал — на карте вспыхнул поток Счастливой Энергии!</b>",
+                "time": 4
+            },
+            {
+                "type": "text",
+                "message_key": "<b>⚡️ Ты — один из Героев, кто способен раскрыть секреты Галактики!</b>",
+                "time": 1
+            }
+        ]
+    },
+    "Second": {
+        "topic_id": 4796,
+        "messages": [
+            {
+                "type": "text",
+                "message_key": "<b>Хорошо, мы отложим взлёт, если ты ещё не готов</b>",
+                "time": 3
+            },
+            {
+                "type": "text",
+                "message_key": "👍",
+                "time": 0
+            },
+            {
+                "type": "text",
+                "message_key": "<b>Я верну всё назад, как только ты будешь готов</b>",
+                "time": 3
+            },
+            {
+                "type": "text",
+                "message_key": "😅",
+                "time": 0
+            }
+        ]
+    },
+    "Three": {
+        "topic_id": 4797,
+        "messages": [
+            {
+                "type": "text",
+                "message_key": "⚠️ Три...",
+                "time": 1
+            },
+            {
+                "type": "text",
+                "message_key": "⚠️ Два...",
+                "time": 1
+            },
+            {
+                "type": "text",
+                "message_key": "⚠️ Один...",
+                "time": 1
+            },
+            {
+                "type": "sticker",
+                "message_key": "CgACAgIAAxkBAAID_Gh24LW3xBr4Ck81nd1fZOVBDq-sAALRcQAClBQwS-qwQhjNu67RNgQ",
+                "time": 2
+            },
+            {
+                "type": "text",
+                "message_key": "💥",
+                "time": 1
+            },
+            {
+                "type": "sticker",
+                "message_key": "CgACAgIAAxkBAAIEAmh24d02zXLtIrEyaDYi5a84e7sEAALacQAClBQwS9gLXkm2f7bcNgQ",
+                "time": 3
+            },
+            {
+                "type": "text",
+                "message_key": "💥",
+                "time": 1
+            },
+            {
+                "type": "text",
+                "message_key": "🚀",
+                "time": 1
+            }
+        ]
+    }
+}

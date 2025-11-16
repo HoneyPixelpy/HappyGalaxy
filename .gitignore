@@ -1,0 +1,15 @@
+.git
+*/venv/
+*/.venv/
+*.env
+trash
+*/db.sqlite3
+__pycache__
+*.log
+TGBot/GPTBot/limits.json
+TGBot/MainBot/utils/Games/GeoHunt/Data/geo.json
+celerybeat-schedule
+docker-compose.yml
+Django/bot/migrations/*py
+*/.vscode
+*.excalidraw

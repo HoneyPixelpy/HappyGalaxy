@@ -1,0 +1,7 @@
+celery
+python-dateutil
+python-dotenv==1.1.1
+pytz
+loguru
+requests
+redis
