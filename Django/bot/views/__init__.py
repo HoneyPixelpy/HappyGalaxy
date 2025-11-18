@@ -37,7 +37,7 @@ from ..serializers import BonusesSerializer, GeoHunterSerializer, LumberjackGame
                 UseBonusesSerializer, UserSerializer, WorkKeysSerializer
 from ..schemas import reward_data, boosts_data
 
-from .game import BoostsMethods, GeoHunterMethods, LumberjackGameMethods, SigmaBoostsMethods, InteractiveGameMethods
+from .game import BoostsMethods, GeoHunterMethods, LumberjackGameMethods, SigmaBoostsViewMethods, InteractiveGameMethods
 from .personal import FamilyTiesMethods, RangsMethods, ReferralConnectionsMethods, UserMethods, WorkKeysMethods
 from .utils import QueryData, check_sql_injection, queue_request
 from .shop import Pikmi_ShopMethods, PurchasesMethods
@@ -45,62 +45,60 @@ from .bonus import BonusesMethods, UseBonusesMethods
 from .quest import Quest_MA_Methods, QuestMethods, UseQuestMethods
 from .backup import CopyBaseMethods
 from .codes import CodesMethods
+from .abstract import *
+
+
+""" NOTE
+НА СТАДИИ РЕФАКТОРИНГА
+"""
 
 """ NOTE
 "no key" в качестве значения ключу нельзя 
 передавать в Django
 """
 
-# NOTE методы возвращающие Response не завершают выполнение метода им
+""" NOTE 
+методы не возвращают Response, а вызывает ошибку в которой передаем 
+данные для составления в дальнейшем Response (всегда это делается в @queue_request)
+"""
 
-class SigmaBoostsViewSet(ViewSet):
+class SigmaBoostsViewSet(ViewSet, AbstractSigmaBoosts):
 
     # GET /api/v1/sigma-boosts/get_by_user/?user_id=123
     @action(detail=False, methods=['get'])
     @queue_request
-    def get_by_user(self, request, user_id=None):
-        """Получить бусты пользователя"""
+    def get_by_user(self, request):
         user_id = QueryData.check_params(request, 'user_id')
 
         user = UserMethods.get(user_id=user_id)
-        boost = SigmaBoostsMethods.get(user=user)
+        boost = SigmaBoostsViewMethods.get(user=user)
         
-        serializer = SigmaBoostsSerializer(boost)
-        return Response(
-            serializer.data,
-            status=status.HTTP_200_OK
-            )
+        SigmaBoostsViewMethods.get_by_user(boost)
 
     # PATCH /api/v1/sigma-boosts/{user_id}/add_passive_income/
     @action(detail=True, methods=['patch']) # , url_path='add-passive-income'
     @queue_request
     def add_passive_income(self, request, pk=None):
-        """
-        Начисляет пассивный доход пользователю
-        """
         # user_id = QueryData.check_params(request, 'user_id')
 
         user = UserMethods.get(pk=pk)
-        boosts_user = SigmaBoostsMethods.get(user=user)
+        boosts_user = SigmaBoostsViewMethods.get(user=user)
         
-        return SigmaBoostsMethods.passive_income_calculation(user, boosts_user)
+        SigmaBoostsViewMethods.passive_income_calculation(user, boosts_user)
     
     # PATCH /api/v1/sigma-boosts/upgrade_boost/?user_id=123&name=asdfas
     @action(detail=False, methods=['patch']) # , url_path='upgrade-boost'
     @queue_request
     def upgrade_boost(self, request):
-        """
-        Улучшает характеристику пользователя
-        """
         user_id = QueryData.check_params(request, 'user_id')
         name = QueryData.check_params(request, 'name')
         
         user = UserMethods.get(pk=user_id)
-        user_boosts = SigmaBoostsMethods.get(user=user)
+        user_boosts = SigmaBoostsViewMethods.get(user=user)
         jack_game = LumberjackGameMethods.get(user=user)
         geo_hunter = GeoHunterMethods.get(user=user)
                 
-        return SigmaBoostsMethods.upgrade_boost(
+        SigmaBoostsViewMethods.upgrade_boost(
             user,
             user_boosts,
             jack_game,
@@ -112,16 +110,12 @@ class SigmaBoostsViewSet(ViewSet):
     @action(detail=False, methods=['get'])
     @queue_request
     def calculate_recovery_time(self, request):
-        """Получаем время для восстановления энергии"""
         user_id = QueryData.check_params(request, 'user_id')
 
         user = UserMethods.get(pk=user_id)
-        user_boosts = SigmaBoostsMethods.get(user=user)
+        user_boosts = SigmaBoostsViewMethods.get(user=user)
         
-        return Response(
-            boosts_data.recovery_level.value_by_level(user_boosts.recovery_level),
-            status=status.HTTP_200_OK
-        )
+        SigmaBoostsViewMethods.calculate_recovery_time(user_boosts)
 
 
 class LumberjackGameViewSet(ViewSet):
@@ -160,7 +154,7 @@ class LumberjackGameViewSet(ViewSet):
 
         user = UserMethods.get(pk=user_id)
         game_user = LumberjackGameMethods.get(user=user)
-        user_boosts = SigmaBoostsMethods.get(user=user)
+        user_boosts = SigmaBoostsViewMethods.get(user=user)
         
         return LumberjackGameMethods.refresh_energy(game_user, user_boosts)
 
@@ -193,7 +187,7 @@ class LumberjackGameViewSet(ViewSet):
         # Получаем все необходимые данные за один запрос
         user = UserMethods.get(user_id=user_id)
         game_user = LumberjackGameMethods.get(user=user)
-        boosts_user = SigmaBoostsMethods.get(user=user)
+        boosts_user = SigmaBoostsViewMethods.get(user=user)
         game_user_two = GeoHunterMethods.get(user=user)
 
         return LumberjackGameMethods.process_click(
@@ -255,7 +249,7 @@ class GeoHunterGameViewSet(ViewSet):
 
         user = UserMethods.get(pk=user_id)
         game_user = GeoHunterMethods.get(user=user)
-        user_boosts = SigmaBoostsMethods.get(user=user)
+        user_boosts = SigmaBoostsViewMethods.get(user=user)
 
         return GeoHunterMethods.refresh_energy(game_user, user_boosts)
 
@@ -276,7 +270,7 @@ class GeoHunterGameViewSet(ViewSet):
         # Получаем все необходимые данные за один запрос
         user = UserMethods.get(pk=user_id)
         game_user = GeoHunterMethods.get(user=user)
-        boosts_user = SigmaBoostsMethods.get(user=user)
+        boosts_user = SigmaBoostsViewMethods.get(user=user)
         game_user_two = LumberjackGameMethods.get(user=user)
 
         response = GeoHunterMethods.process_click(
@@ -334,7 +328,7 @@ class BoostsViewSet(ViewSet):
         user_id = QueryData.check_params(request, 'user_id')
         
         user = UserMethods.get(pk=user_id)
-        user_boosts = SigmaBoostsMethods.get(user=user)
+        user_boosts = SigmaBoostsViewMethods.get(user=user)
         
         return BoostsMethods.catalog(user_boosts)
 
@@ -349,7 +343,7 @@ class BoostsViewSet(ViewSet):
         name = QueryData.check_params(request, 'name')
         
         user = UserMethods.get(pk=user_id)
-        user_boosts = SigmaBoostsMethods.get(user=user)
+        user_boosts = SigmaBoostsViewMethods.get(user=user)
         
         return BoostsMethods.info(user_boosts, name)
 

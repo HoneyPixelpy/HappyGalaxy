@@ -8,12 +8,11 @@ import tempfile
 from datetime import datetime, timedelta, date
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 from django.http import HttpResponse
+from django.conf import settings
 from loguru import logger
 
 from rest_framework import status
 from rest_framework.response import Response
-
-from conf.settings import BASE_DIR, DATABASES
 
 
 class CopyBaseAbstractMethods(metaclass=abc.ABCMeta):
@@ -28,7 +27,7 @@ class SQLiteMethods(CopyBaseAbstractMethods):
         with tempfile.NamedTemporaryFile(delete=False, suffix='.sqlite3') as tmp_file:
             backup_path = tmp_file.name
         
-        DB_PATH = BASE_DIR / 'db.sqlite3'
+        DB_PATH = settings.BASE_DIR / 'db.sqlite3'
         
         # Копируем базу данных
         shutil.copy2(DB_PATH, backup_path)
@@ -61,7 +60,7 @@ class PostgreSQLMethods(CopyBaseAbstractMethods):
         """
         Создает дамп базы данных PostgreSQL через Python с правильной обработкой массивов
         """
-        db_settings = DATABASES['default']
+        db_settings = settings.DATABASES['default']
         db_name = db_settings['NAME']
         db_user = db_settings['USER']
         db_password = db_settings['PASSWORD']

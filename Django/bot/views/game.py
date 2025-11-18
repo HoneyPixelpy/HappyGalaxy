@@ -13,12 +13,14 @@ from bot.schemas.game import BoostData
 from conf.settings import DEBUG
 
 from ..models import Bonuses, GameData, GeoHunter, InteractiveGames, Lumberjack_Game, Sigma_Boosts, Users
-from ..serializers import GameDataSerializer, GeoHunterSerializer, InteractiveGamesSerializer, LumberjackGameSerializer, UserSerializer
+from ..serializers import GameDataSerializer, GeoHunterSerializer, InteractiveGamesSerializer, LumberjackGameSerializer, SigmaBoostsSerializer, UserSerializer
 from ..schemas import boosts_data
 from .error import RaisesResponse
+from .abstract import *
 
 
 INTERACTIVE_INVITE_TIME = 10
+
 
 class SigmaBoostsMethods:
     @classmethod
@@ -27,32 +29,49 @@ class SigmaBoostsMethods:
         pk: Optional[int] = None,
         user: Optional[Users] = None
         ) -> Sigma_Boosts:
-        """Получить бусты пользователя"""
+        """
+        Получаем или создаем информацию о бустах
+        """
         try:
             if pk:
                 return Sigma_Boosts.objects.get(pk=pk)
-            else:
+            elif user:
                 return Sigma_Boosts.objects.get(user=user)
+            else:
+                raise Exception("Нет нужного аргумента")
         except Sigma_Boosts.DoesNotExist:
             return Sigma_Boosts.objects.create(user=user)
     @classmethod
-    def passive_income_calculation(
+    def _check_passive_income_level(
         cls, 
         user: Users,
         boosts_user: Sigma_Boosts
-        ) -> Response:
+        ) -> Optional[RaisesResponse]:
         """
-        Начисляет пассивный доход пользователю
+        Удостоверяемся, что пассивный доход
+        прокачен хоть на один уровень
         """
         if boosts_user.passive_income_level == 0:
             raise RaisesResponse(
                 data={'income': 0, 'user': UserSerializer(user).data},
                 status=status.HTTP_200_OK
             )
-
-        last_passive_claim = boosts_user.last_passive_claim
-        now = timezone.now().astimezone(pytz.timezone('Europe/Moscow'))
-        seconds_passed = (now - last_passive_claim).total_seconds()
+    @classmethod
+    def _calculate_elapsed_hours(
+        cls, 
+        user: Users,
+        boosts_user: Sigma_Boosts
+        ) -> Union[RaisesResponse, int]:
+        """
+        Расчитываем сколько часов прошло с последнего 
+        зачисления пассивного дохода
+        """
+        now = timezone.now().astimezone(
+            pytz.timezone('Europe/Moscow')
+            )
+        seconds_passed = (
+            now - boosts_user.last_passive_claim
+            ).total_seconds()
         full_hours = int(seconds_passed // 3600)
         
         if full_hours < 1:
@@ -60,18 +79,139 @@ class SigmaBoostsMethods:
                 data={'income': 0, 'user': UserSerializer(user).data},
                 status=status.HTTP_200_OK
             )
-
-        # Расчет дохода
-        income = full_hours * boosts_data.passive_income_level.value_by_level(
+        return full_hours
+    @classmethod
+    def _calculate_passive_income(
+        cls, 
+        boosts_user: Sigma_Boosts,
+        full_hours: int
+        ) -> float:
+        """
+        Расчитываем доход от пассивки
+        """
+        return full_hours * boosts_data.passive_income_level.value_by_level(
             boosts_user.passive_income_level
         )
-        
-        # Обновление данных
-        boosts_user.last_passive_claim = last_passive_claim + timedelta(hours=full_hours)
+    @classmethod
+    def _add_passive_income(
+        cls, 
+        user: Users,
+        boosts_user: Sigma_Boosts,
+        full_hours: int,
+        income: float
+        ) -> None:
+        """
+        Обновление данных о последнем зачислении пассивного дохода
+        и зачисляем доход пользователю
+        """
+        boosts_user.last_passive_claim = boosts_user.last_passive_claim + timedelta(hours=full_hours)
         boosts_user.save()
         
         user.starcoins += income
         user.save()
+    @classmethod
+    def _check_possibility_upgrade_by_starcoins(
+        cls, 
+        user: Users,
+        boost_data: BoostData,
+        boost_level: int
+        ) -> None:
+        """
+        Проверяем позволяют ли средстава
+        пользователя улучшить буст
+        """
+        if user.starcoins < boost_data.price(boost_level):
+            raise RaisesResponse(
+                data=False,
+                status=status.HTTP_200_OK
+            )
+    @classmethod
+    def _check_possibility_upgrade_by_max_level(
+        cls, 
+        boost_data: BoostData,
+        boost_level: int
+        ) -> None:
+        """
+        Проверяем не прокачен ли буст
+        на максимальный уровень
+        """
+        if boost_level >= boost_data.max_level():
+            raise RaisesResponse(
+                data=False,
+                status=status.HTTP_200_OK
+            )
+    @classmethod
+    def _upgrade_boost(
+        cls, 
+        user_boosts: Sigma_Boosts,
+        name: str,
+        boost_level: int
+        ) -> None:
+        """
+        Проверяем не прокачен ли буст
+        на максимальный уровень
+        
+        Если мы впервые качаем пассивку, то
+        выставляем время последнего зачисления
+        """
+        if name == 'passive_income_level' and user_boosts.passive_income_level == 0:
+            user_boosts.last_passive_claim = datetime.now()
+
+        setattr(user_boosts, name, boost_level + 1)
+        user_boosts.save()
+    @classmethod
+    def _write_off_money(
+        cls, 
+        user: Users,
+        boost_data: BoostData,
+        boost_level: int
+        ) -> None:
+        """
+        Списание средств
+        """
+        user.starcoins -= boost_data.price(boost_level)
+        user.save()    
+    @classmethod
+    def _refresh_energy(
+        cls, 
+        game: Union[GeoHunter, Lumberjack_Game],
+        name: Optional[str] = None,
+        new_max_energy: Optional[int] = None
+        ) -> None:
+        """
+        Восстанавливаем энергию
+        """
+        if name and new_max_energy and isinstance(game, Lumberjack_Game):
+            if name == 'energy_capacity_level':
+                game.max_energy = new_max_energy
+            
+        game.current_energy = game.max_energy
+        game.last_energy_update = datetime.now()
+        game.save()
+
+
+class SigmaBoostsViewMethods(AbstractSigmaBoosts, SigmaBoostsMethods):
+    @classmethod
+    def get_by_user(
+        cls, 
+        boost: Sigma_Boosts
+        ) -> RaisesResponse:
+        raise RaisesResponse(
+            SigmaBoostsSerializer(boost).data,
+            status=status.HTTP_200_OK
+            )
+    @classmethod
+    def passive_income_calculation(
+        cls, 
+        user: Users,
+        boosts_user: Sigma_Boosts
+        ) -> RaisesResponse:
+        cls._check_passive_income_level(user, boosts_user)
+
+        full_hours = cls._calculate_elapsed_hours(user, boosts_user)
+        income = cls._calculate_passive_income(boosts_user, full_hours)
+        
+        cls.add_passive_income(user, boosts_user, full_hours, income)
 
         raise RaisesResponse(
             data={
@@ -88,53 +228,26 @@ class SigmaBoostsMethods:
         jack_game: Lumberjack_Game,
         geo_hunter: GeoHunter,
         name: str
-        ) -> Response:
-        """
-        Улучшает характеристику пользователя
-        """
+        ) -> RaisesResponse:
         boost_level: int = getattr(user_boosts, name)
         boost_data: BoostData = getattr(boosts_data, name)
-        current_price = boost_data.price(boost_level)
-        next_level_value = boost_data.value_by_level(boost_level+1)
         
         if not DEBUG:
-            if user.starcoins < boost_data.price(boost_level):
-                raise RaisesResponse(
-                    data=False,
-                    status=status.HTTP_200_OK
+            cls._check_possibility_upgrade_by_starcoins(user, boost_data, boost_level)
+        cls._check_possibility_upgrade_by_max_level(boost_data, boost_level)
+                    
+        cls._upgrade_boost(user_boosts, name, boost_level)
+        cls._write_off_money(user, boost_data, boost_level)
+        
+        if jack_game:
+            cls._refresh_energy(
+                jack_game,
+                name,
+                boost_data.value_by_level(boost_level+1)
                 )
         
-        if boost_level >= boost_data.max_level():
-            raise RaisesResponse(
-                data=False,
-                status=status.HTTP_200_OK
-            )
-                    
-        # Обновляем уровень буста
-        if name == 'passive_income_level' and user_boosts.passive_income_level == 0:
-            user_boosts.last_passive_claim = datetime.now()
-        current_level = getattr(user_boosts, name)
-        setattr(user_boosts, name, current_level + 1)
-        user_boosts.save()
-        
-        # Списание средств
-        user.starcoins -= current_price
-        user.save()
-        
-        # Обновление игры Lumberjack если нужно
-        if jack_game:
-            if name == 'energy_capacity_level':
-                jack_game.max_energy = next_level_value
-
-            jack_game.current_energy = jack_game.max_energy
-            jack_game.last_energy_update = datetime.now()
-            jack_game.save()
-        
-        # Обновление игры Lumberjack если нужно
         if geo_hunter:
-            geo_hunter.current_energy = geo_hunter.max_energy
-            geo_hunter.last_energy_update = datetime.now()
-            geo_hunter.save()
+            cls._refresh_energy(geo_hunter)
         
         raise RaisesResponse(
             data={
@@ -144,6 +257,16 @@ class SigmaBoostsMethods:
             },
             status=status.HTTP_200_OK
         )
+    @classmethod
+    def calculate_recovery_time(
+        cls, 
+        user_boosts: Sigma_Boosts
+        ) -> RaisesResponse:
+        raise RaisesResponse(
+            boosts_data.recovery_level.value_by_level(user_boosts.recovery_level),
+            status=status.HTTP_200_OK
+        )
+
 
 class GameMethods:
     @classmethod

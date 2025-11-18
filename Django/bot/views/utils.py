@@ -154,9 +154,14 @@ def queue_request(func):
                 status=e.status
             )
         except Exception as e:
-            logger.exception(str(func) + str(e) + e.__class__.__name__)
+            error = "\n{}: {}\n{}".format(
+                str(func),
+                e.__class__.__name__,
+                str(e)
+            )
+            logger.exception(error)
             return Response(
-                {'error': str(e)},
+                {'error': error},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
     return wrapper
