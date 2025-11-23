@@ -56,11 +56,11 @@ class QuestMethods:
         ) -> Response:
         serializer = QuestsSerializer(quest).data
         
-        moscow_tz = pytz.timezone('Europe/Moscow')
-        current_date = timezone.now().astimezone(moscow_tz).date()
+        # moscow_tz = pytz.timezone('Europe/Moscow')
+        current_date = timezone.now().date() # .astimezone(moscow_tz)
         user_quests = UseQuests.objects.filter(user=user, quest=quest).first()
         if user_quests:
-            last_update_date = user_quests.updated_at.astimezone(moscow_tz).date()
+            last_update_date = user_quests.updated_at.date() # .astimezone(moscow_tz)
             if quest.type_quest in ["idea", "daily"]:
                 if quest.type_quest == "daily":
                     if current_date <= last_update_date:
@@ -169,9 +169,9 @@ class QuestMethods:
                         continue
                 
                 if quest.type_quest == "daily":
-                    moscow_tz = pytz.timezone('Europe/Moscow')
-                    last_update_date = user_quests.updated_at.astimezone(moscow_tz).date()
-                    current_date = timezone.now().astimezone(moscow_tz).date()
+                    # moscow_tz = pytz.timezone('Europe/Moscow')
+                    last_update_date = user_quests.updated_at.date() # .astimezone(moscow_tz)
+                    current_date = timezone.now().date() # .astimezone(moscow_tz)
                     if current_date <= last_update_date:
                         continue
 
@@ -278,9 +278,9 @@ class UseQuestMethods:
         
         if use_quest_obj:
             if quest.type_quest in ["idea","daily"]:
-                moscow_tz = pytz.timezone('Europe/Moscow')
-                last_update_date = use_quest_obj.updated_at.astimezone(moscow_tz).date()
-                current_date = timezone.now().astimezone(moscow_tz).date()
+                # moscow_tz = pytz.timezone('Europe/Moscow')
+                last_update_date = use_quest_obj.updated_at.date() # .astimezone(moscow_tz)
+                current_date = timezone.now().date() # .astimezone(moscow_tz)
                 days_passed = (current_date - last_update_date).days
                 
                 count_use: Optional[int] = quest.quest_data.count_use
