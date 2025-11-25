@@ -101,14 +101,14 @@ class Lumberjack_GameForms:
                 col
                 )
 
-    async def update_energy(
+    async def restore_energy(
         self,
         game_user: Lumberjack_Game,
         ) -> None:
         """
         Восстановление энергии со временем
         """
-        await Lumberjack_GameMethods().update_energy(
+        await Lumberjack_GameMethods().restore_energy(
             game_user.id
             )
 

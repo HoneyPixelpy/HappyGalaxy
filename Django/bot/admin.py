@@ -85,6 +85,13 @@ class Family_TiesAdmin(admin.ModelAdmin):
     
     # Поля только для чтения (если оставить возможность просмотра деталей)
     readonly_fields = ('from_user', 'to_user')
+    list_display_links = ('from_user', 'to_user')
+    search_fields = (
+        'from_user__user_id',
+        'from_user__tg_username',
+        'to_user__user_id',
+        'to_user__tg_username',
+        )
 
     # Убираем кнопки "Добавить" и "Изменить"
     def get_actions(self, request):
@@ -112,6 +119,10 @@ class Pikmi_ShopAdmin(admin.ModelAdmin):
         'title',
         'description',
         'role',
+        )
+    search_fields = (
+        'title',
+        'description',
         )
 
 class PurchasesAdmin(admin.ModelAdmin):
@@ -144,6 +155,10 @@ class PurchasesAdmin(admin.ModelAdmin):
         )
     list_editable = (
         'completed',
+        )
+    search_fields = (
+        'user__user_id',
+        'user__tg_username',
         )
 
     # Убираем кнопки "Добавить" и "Изменить"
@@ -182,6 +197,10 @@ class Lumberjack_GameAdmin(admin.ModelAdmin):
         '_last_energy_update',
         'current_grid',
         )
+    search_fields = (
+        'user__user_id',
+        'user__tg_username',
+        )
 
     # Убираем кнопки "Добавить" и "Изменить"
     def get_actions(self, request):
@@ -218,6 +237,10 @@ class GeoHunterAdmin(admin.ModelAdmin):
         '_total_currency',
         'game_date',
         '_last_energy_update',
+        )
+    search_fields = (
+        'user__user_id',
+        'user__tg_username',
         )
 
     def kpd(self, obj):
@@ -267,6 +290,10 @@ class Sigma_BoostsAdmin(admin.ModelAdmin):
         'recovery_level',
         'passive_income_level',
         '_last_passive_claim',
+        )
+    search_fields = (
+        'user__user_id',
+        'user__tg_username',
         )
 
     # Убираем кнопки "Добавить" и "Изменить"
@@ -337,6 +364,11 @@ class UseBonusesAdmin(admin.ModelAdmin):
     # Поля только для чтения (если оставить возможность просмотра деталей)
     readonly_fields = ('user', 'bonus')
 
+    search_fields = (
+        'user__user_id',
+        'user__tg_username',
+        )
+
     # Убираем кнопки "Добавить" и "Изменить"
     def get_actions(self, request):
         actions = super().get_actions(request)
@@ -345,11 +377,12 @@ class UseBonusesAdmin(admin.ModelAdmin):
         return actions
 
 class UseQuestsAdmin(admin.ModelAdmin):
-    list_display = ('id', 'user', 'quest', 'count_use')
+    list_display = ('id', 'user', 'quest', 'count_use', 'updated_at')
     search_fields = (
-        'user__user_id', 
+        'user__user_id',
+        'user__tg_username',
         )
-    readonly_fields = ('user', 'quest')
+    readonly_fields = ('user', 'quest', 'updated_at')
     list_editable = ('count_use',)
     
     # Отключаем возможность добавления новых записей
@@ -741,6 +774,11 @@ class UsePromocodesAdmin(admin.ModelAdmin):
     
     # Поля только для чтения (если оставить возможность просмотра деталей)
     readonly_fields = ('user', 'promocode')
+    
+    search_fields = (
+        'user__user_id',
+        'user__tg_username',
+        )
 
     # Убираем кнопки "Добавить" и "Изменить"
     def get_actions(self, request):

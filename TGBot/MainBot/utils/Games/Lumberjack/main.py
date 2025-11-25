@@ -156,14 +156,12 @@ class LumberjackGame:
         _, row, col = call.data.split("|")
         row, col = int(row), int(col)
         
-        data: dict = await Lumberjack_GameMethods().refresh_energy(
-            user=user
-            )
+        data: dict = await Lumberjack_GameMethods().game_state(user)
         game_user = data['game_user']
 
         if data['force_update_energy']:
             from MainBot.utils.Games import LumberjackManager
-            await LumberjackManager().force_update_energy(user, game_user)
+            await LumberjackManager().force_update_energy(user)
             await Func.send_error_to_developer(
                 "Энергия пользователя {user_id} {tg_username} не восстановилось после истечения времени".format(
                     user_id=user.user_id,
@@ -204,14 +202,12 @@ class LumberjackGame:
         """
         Обновляет игровое поле
         """
-        data: dict = await Lumberjack_GameMethods().refresh_energy(
-            user=user
-            )
+        data: dict = await Lumberjack_GameMethods().game_state(user)
         game_user = data['game_user']
         
         if data['force_update_energy']:
             from MainBot.utils.Games import LumberjackManager
-            await LumberjackManager().force_update_energy(user, game_user)
+            await LumberjackManager().force_update_energy(user)
             await Func.send_error_to_developer(
                 "Энергия пользователя {user_id} {tg_username} не восстановилось после истечения времени".format(
                     user_id=user.user_id,

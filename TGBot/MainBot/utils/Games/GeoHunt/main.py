@@ -414,14 +414,14 @@ class GeoHuntMain(Build):
         user_choice: bool = (_id == str(true_var.get("id")))
         logger.debug(f"{call.from_user.id}: {_id} -> {user_choice}")
         
-        data: dict = await GeoHunter_GameMethods().refresh_energy(
+        data: dict = await GeoHunter_GameMethods().game_state(
             user=user
             )
         game_user = data['game_user']
 
         if data['force_update_energy']:
             from MainBot.utils.Games import GeoHuntManager
-            await GeoHuntManager().force_update_energy(user, game_user)
+            await GeoHuntManager().force_update_energy(user)
             await Func.send_error_to_developer(
                 "В ГЕОХантере Энергия пользователя {user_id} {tg_username} не восстановилось после истечения времени".format(
                     user_id=user.user_id,

@@ -281,15 +281,10 @@ class ActivateBonusBoosters:
             if (
                 result and
                 isinstance(result, dict) and
-                result.get("game")
+                "success_energy_renewal" == result.get("text", "")
                 ):
-                await LumberjackManager().force_update_energy(
-                    user, 
-                    Lumberjack_Game(**result.get("game"))
-                    )
-                await GeoHuntManager().force_update_energy(
-                    user, 
-                    )
+                await LumberjackManager().force_update_energy(user)
+                await GeoHuntManager().force_update_energy(user)
             try:
                 text_name: str = result['text']
                 if text_name == "not_active":

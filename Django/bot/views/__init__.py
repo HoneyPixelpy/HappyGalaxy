@@ -12,7 +12,6 @@ __all__ = [
     "QuestsViewSet",
     "UseQuestsViewSet",
     "RewardViewSet",
-    "BoostsViewSet",
     "CopyBaseViewSet",
     "RangsViewSet",
     "PromocodesViewSet",
@@ -32,12 +31,12 @@ from rest_framework.viewsets import ViewSet
 
 from bot.service.rang import RangService
 
-from ..serializers import BonusesSerializer, GeoHunterSerializer, LumberjackGameSerializer, \
-    PikmiShopSerializer, PurchasesSerializer, QuestsSerializer, SigmaBoostsSerializer, \
+from ..serializers import BonusesSerializer, \
+    PikmiShopSerializer, PurchasesSerializer, QuestsSerializer, \
                 UseBonusesSerializer, UserSerializer, WorkKeysSerializer
-from ..schemas import reward_data, boosts_data
+from ..schemas import reward_data
 
-from .game import BoostsMethods, GeoHunterMethods, LumberjackGameMethods, SigmaBoostsViewMethods, InteractiveGameMethods
+from .game import GeoHunterViewMethods, LumberjackGameViewMethods, SigmaBoostsViewMethods, InteractiveGameMethods
 from .personal import FamilyTiesMethods, RangsMethods, ReferralConnectionsMethods, UserMethods, WorkKeysMethods
 from .utils import QueryData, check_sql_injection, queue_request
 from .shop import Pikmi_ShopMethods, PurchasesMethods
@@ -63,6 +62,29 @@ from .abstract import *
 """
 
 class SigmaBoostsViewSet(ViewSet, AbstractSigmaBoosts):
+
+    # GET /api/v1/sigma-boosts/catalog/?user_id=123123
+    @action(detail=False, methods=['get'])
+    @queue_request
+    def catalog(self, request):
+        user_id = QueryData.check_params(request, 'user_id')
+        
+        user = UserMethods.get(pk=user_id)
+        user_boosts = SigmaBoostsViewMethods.get(user=user)
+        
+        SigmaBoostsViewMethods.catalog(user_boosts)
+
+    # GET /api/v1/sigma-boosts/info/?user_id=123123&name=income_level
+    @action(detail=False, methods=['get'])
+    @queue_request
+    def info(self, request):
+        user_id = QueryData.check_params(request, 'user_id')
+        name = QueryData.check_params(request, 'name')
+        
+        user = UserMethods.get(pk=user_id)
+        user_boosts = SigmaBoostsViewMethods.get(user=user)
+        
+        SigmaBoostsViewMethods.info(user_boosts, name)
 
     # GET /api/v1/sigma-boosts/get_by_user/?user_id=123
     @action(detail=False, methods=['get'])
@@ -95,8 +117,8 @@ class SigmaBoostsViewSet(ViewSet, AbstractSigmaBoosts):
         
         user = UserMethods.get(pk=user_id)
         user_boosts = SigmaBoostsViewMethods.get(user=user)
-        jack_game = LumberjackGameMethods.get(user=user)
-        geo_hunter = GeoHunterMethods.get(user=user)
+        jack_game = LumberjackGameViewMethods.get(user=user)
+        geo_hunter = GeoHunterViewMethods.get(user=user)
                 
         SigmaBoostsViewMethods.upgrade_boost(
             user,
@@ -118,79 +140,62 @@ class SigmaBoostsViewSet(ViewSet, AbstractSigmaBoosts):
         SigmaBoostsViewMethods.calculate_recovery_time(user_boosts)
 
 
-class LumberjackGameViewSet(ViewSet):
+class LumberjackGameViewSet(ViewSet, AbstractGame, AbstractLumberjackGame):
 
     # GET /api/v1/lumberjack-games/{id}/
     @queue_request
     def retrieve(self, request, pk=None):
-        """Получить игру пользователя"""
         user = UserMethods.get(user_id=pk)
-        game = LumberjackGameMethods.get(user=user)
+        game = LumberjackGameViewMethods.get(user=user)
         
-        serializer = LumberjackGameSerializer(game)
-        return Response(
-            serializer.data,
-            status=status.HTTP_200_OK
-            )
+        LumberjackGameViewMethods.retrieve(game)
 
     # GET /api/v1/lumberjack-games/active_games/
     @action(detail=False, methods=['get'])
     @queue_request
     def active_games(self, request):
-        """Получить все активные игры (аналог get_active_games)"""
-        games = LumberjackGameMethods.all().select_related('user')
-        serializer = LumberjackGameSerializer(games, many=True)
-        return Response(
-            serializer.data,
-            status=status.HTTP_200_OK
-            )
+        games = LumberjackGameViewMethods.all().select_related('user')
 
-    # GET /api/v1/lumberjack-games/refresh_energy/?user_id=123123
-    @action(detail=False, methods=['get'])
+        LumberjackGameViewMethods.active_games(games)
+
+    # PATCH /api/v1/lumberjack-games/{user_id}/game_state/
+    @action(detail=True, methods=['patch'])
     @queue_request
-    def refresh_energy(self, request):
-        """Получить все активные игры (аналог get_active_games)"""
-        user_id = QueryData.check_params(request, 'user_id')
+    def game_state(self, request, pk=None):
+        # user_id = QueryData.check_params(request, 'user_id')
 
-        user = UserMethods.get(pk=user_id)
-        game_user = LumberjackGameMethods.get(user=user)
+        user = UserMethods.get(pk=pk)
+        game_user = LumberjackGameViewMethods.get(user=user)
         user_boosts = SigmaBoostsViewMethods.get(user=user)
         
-        return LumberjackGameMethods.refresh_energy(game_user, user_boosts)
+        LumberjackGameViewMethods.game_state(game_user, user_boosts)
 
     # PATCH /api/v1/lumberjack-games/{game_user_id}/update_grid/
     @action(detail=True, methods=['patch']) # , url_path='update-grid'
     @queue_request
     def update_grid(self, request, pk=None):
-        """
-        Обновляет игровое поле пользователя
-        """
         # game_user_id = QueryData.check_params(request, 'game_user_id')
         grid = QueryData.check_params(request, 'grid')
         
-        game_user = LumberjackGameMethods.get(pk=pk)
+        game_user = LumberjackGameViewMethods.get(pk=pk)
         
-        return LumberjackGameMethods.update_grid(game_user, grid)
+        LumberjackGameViewMethods.update_grid(game_user, grid)
 
     # PATCH /api/v1/lumberjack-games/process_click/
     @action(detail=False, methods=['patch']) # , url_path='process-click'
     @queue_request
     def process_click(self, request):
-        """
-        Обрабатывает клик в игре с учетом всех бустов и обновляет состояние
-        """
         user_id = QueryData.check_params(request, 'user_id')
         energy_in_click = QueryData.check_params(request, 'energy_in_click')
         row = QueryData.check_params(request, 'row')
         col = QueryData.check_params(request, 'col')
         
-        # Получаем все необходимые данные за один запрос
         user = UserMethods.get(user_id=user_id)
-        game_user = LumberjackGameMethods.get(user=user)
+        game_user = LumberjackGameViewMethods.get(user=user)
         boosts_user = SigmaBoostsViewMethods.get(user=user)
-        game_user_two = GeoHunterMethods.get(user=user)
+        game_user_two = GeoHunterViewMethods.get(user=user)
 
-        return LumberjackGameMethods.process_click(
+        LumberjackGameViewMethods.process_click(
             user,
             game_user,
             game_user_two,
@@ -209,71 +214,57 @@ class LumberjackGameViewSet(ViewSet):
         """
         # game_user_id = QueryData.check_params(request, 'game_user_id')
 
-        game_user = LumberjackGameMethods.get(pk=pk)
-        game_user_two = GeoHunterMethods.get(user=game_user.user)
+        game_user = LumberjackGameViewMethods.get(pk=pk)
+        game_user_two = GeoHunterViewMethods.get(user=game_user.user)
         
-        return LumberjackGameMethods.restore_energy(game_user, game_user_two)
+        LumberjackGameViewMethods.restore_energy(game_user, game_user_two)
 
 
-class GeoHunterGameViewSet(ViewSet):
+class GeoHunterGameViewSet(ViewSet, AbstractGame):
 
     # GET /api/v1/geo-hunter/{id}/
     @queue_request
     def retrieve(self, request, pk=None):
         """Получить геохантер"""
         user = UserMethods.get(user_id=pk)
-        game = GeoHunterMethods.get(user=user)
+        game = GeoHunterViewMethods.get(user=user)
         
-        serializer = GeoHunterSerializer(game)
-        return Response(
-            serializer.data,
-            status=status.HTTP_200_OK
-            )
+        GeoHunterViewMethods.retrieve(game)
 
     # GET /api/v1/geo-hunter/active_games/
     @action(detail=False, methods=['get'])
     @queue_request
     def active_games(self, request):
-        games = GeoHunterMethods.all().select_related('user')
-        serializer = GeoHunterSerializer(games, many=True)
-        return Response(
-            serializer.data,
-            status=status.HTTP_200_OK
-            )
+        games = GeoHunterViewMethods.all().select_related('user')
 
-    # GET /api/v1/geo-hunter/refresh_energy/?user_id=123123
-    @action(detail=False, methods=['get'])
+        GeoHunterViewMethods.active_games(games)
+
+    # PATCH /api/v1/geo-hunter/{user_id}/game_state/
+    @action(detail=True, methods=['patch'])
     @queue_request
-    def refresh_energy(self, request):
-        user_id = QueryData.check_params(request, 'user_id')
+    def game_state(self, request, pk=None):
+        # user_id = QueryData.check_params(request, 'user_id')
 
-        user = UserMethods.get(pk=user_id)
-        game_user = GeoHunterMethods.get(user=user)
+        user = UserMethods.get(pk=pk)
+        game_user = GeoHunterViewMethods.get(user=user)
         user_boosts = SigmaBoostsViewMethods.get(user=user)
 
-        return GeoHunterMethods.refresh_energy(game_user, user_boosts)
+        GeoHunterViewMethods.game_state(game_user, user_boosts)
 
     # PATCH /api/v1/geo-hunter/process_click/
     @action(detail=False, methods=['patch']) # , url_path='process-click'
     @queue_request
     def process_click(self, request):
-        """
-        Обрабатывает клик в игре с учетом всех бустов и обновляет состояние
-        """
         user_id = QueryData.check_params(request, 'user_id')
         energy_in_click = QueryData.check_params(request, 'energy_in_click')
         user_choice = QueryData.check_params(request, "user_choice")
-        logger.debug(user_id)
-        logger.debug(energy_in_click)
-        logger.debug(user_choice)
 
-        # Получаем все необходимые данные за один запрос
         user = UserMethods.get(pk=user_id)
-        game_user = GeoHunterMethods.get(user=user)
+        game_user = GeoHunterViewMethods.get(user=user)
         boosts_user = SigmaBoostsViewMethods.get(user=user)
-        game_user_two = LumberjackGameMethods.get(user=user)
+        game_user_two = LumberjackGameViewMethods.get(user=user)
 
-        response = GeoHunterMethods.process_click(
+        GeoHunterViewMethods.process_click(
             user,
             game_user,
             game_user_two,
@@ -281,14 +272,9 @@ class GeoHunterGameViewSet(ViewSet):
             energy_in_click,
             user_choice
         )
-        logger.debug(response)
-        return Response(
-            response,
-            status=status.HTTP_200_OK
-            )
 
     # PATCH /api/v1/geo-hunter/{game_user_id}/restore_energy/
-    @action(detail=False, methods=['patch']) # , url_path='restore-energy'
+    @action(detail=True, methods=['patch']) # , url_path='restore-energy'
     @queue_request
     def restore_energy(self, request, pk=None):
         """
@@ -296,10 +282,10 @@ class GeoHunterGameViewSet(ViewSet):
         """
         # game_user_id = QueryData.check_params(request, 'game_user_id')
 
-        game_user = GeoHunterMethods.get(pk=pk)
-        game_user_two = LumberjackGameMethods.get(user=game_user.user)
+        game_user = GeoHunterViewMethods.get(pk=pk)
+        game_user_two = LumberjackGameViewMethods.get(user=game_user.user)
             
-        return GeoHunterMethods.restore_energy(game_user, game_user_two)
+        GeoHunterViewMethods.restore_energy(game_user, game_user_two)
 
 
 class RewardViewSet(ViewSet):
@@ -314,38 +300,6 @@ class RewardViewSet(ViewSet):
             reward_data.model_dump(),
             status=status.HTTP_200_OK
             )
-
-
-class BoostsViewSet(ViewSet):
-
-    # GET /api/v1/boosts_data/catalog/?user_id=123123
-    @action(detail=False, methods=['get'])
-    @queue_request
-    def catalog(self, request):
-        """
-        Получаем данные для вознаграждений
-        """
-        user_id = QueryData.check_params(request, 'user_id')
-        
-        user = UserMethods.get(pk=user_id)
-        user_boosts = SigmaBoostsViewMethods.get(user=user)
-        
-        return BoostsMethods.catalog(user_boosts)
-
-    # GET /api/v1/boosts_data/info/?user_id=123123&name=income_level
-    @action(detail=False, methods=['get'])
-    @queue_request
-    def info(self, request):
-        """
-        Получаем данные для вознаграждений
-        """
-        user_id = QueryData.check_params(request, 'user_id')
-        name = QueryData.check_params(request, 'name')
-        
-        user = UserMethods.get(pk=user_id)
-        user_boosts = SigmaBoostsViewMethods.get(user=user)
-        
-        return BoostsMethods.info(user_boosts, name)
 
 
 class UserViewSet(ViewSet):
@@ -842,10 +796,12 @@ class BonusesViewSet(ViewSet):
                 now=now
             )
         elif bonus.type_bonus == "energy_renewal":
-            game = LumberjackGameMethods.get(user=user).first()
-            return UseBonusesMethods.create_energy_renewal(
+            lumberjack = LumberjackGameViewMethods.get(user=user).first()
+            geohunter = GeoHunterViewMethods.get(user=user).first()
+            return UseBonusesMethods.activate_energy_renewal(
                 bonus=bonus,
-                game=game,
+                lumberjack=lumberjack,
+                geohunter=geohunter,
                 now=now
             )
         else:

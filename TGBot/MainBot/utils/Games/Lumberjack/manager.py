@@ -44,7 +44,7 @@ class EnergyUpdateManager:
                 
                 if time_passed >= required_delay:
                     # Немедленное обновление
-                    await Lumberjack_GameForms().update_energy(game)
+                    await Lumberjack_GameForms().restore_energy(game)
                 else:
                     # Запуск отложенного обновления
                     remaining_time = (required_delay - time_passed).total_seconds()
@@ -135,7 +135,7 @@ class EnergyUpdateManager:
                     _active_tasks.pop(user.user_id, None)
                 return
             
-            await Lumberjack_GameForms().update_energy(game_user)
+            await Lumberjack_GameForms().restore_energy(game_user)
 
             await self._notify_user(user)
 
@@ -151,9 +151,7 @@ class EnergyUpdateManager:
 
     async def force_update_energy(
         self, 
-        user: Users,
-        game_user: Lumberjack_Game = None,
-        refrash: bool = True
+        user: Users
         ) -> None:
         """
         Принудительно обновляет энергию и отменяет запланированную задачу.
@@ -169,14 +167,6 @@ class EnergyUpdateManager:
                     await task_data["task"]  # Ожидаем завершения (обрабатываем CancelledError)
                 except asyncio.CancelledError:
                     pass
-            
-            if refrash:
-                if not game_user:
-                    game_user = await Lumberjack_GameMethods().get_by_user(user=user)
-                
-                # Обновляем энергию
-                if game_user.current_energy < game_user.max_energy:
-                    await Lumberjack_GameForms().update_energy(game_user)
 
     async def _notify_user(
         self, 

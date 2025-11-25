@@ -18,12 +18,6 @@ class DataMethods:
         reward = RewardData(**data) if data else None
         return reward
 
-    async def catalog_boosts(self, user: Users) -> Optional[List]:
-        return await self.api.get_catalog_boosts(user.id)
-
-    async def info_boost(self, user: Users, name: str) -> Optional[Dict]:
-        return await self.api.get_info_boost(user.id, name)
-
 
 class UserMethods:
 
@@ -207,6 +201,7 @@ class UserMethods:
         )
         return [Users(**data) for data in datas]
 
+
 class Family_TiesMethods:
 
     def __init__(self):
@@ -323,6 +318,12 @@ class Sigma_BoostsMethods:
     def __init__(self):
         self.api = Sigma_BoostsRequests()
 
+    async def catalog_boosts(self, user: Users) -> Optional[List]:
+        return await self.api.get_catalog_boosts(user.id)
+
+    async def info_boost(self, user: Users, name: str) -> Optional[Dict]:
+        return await self.api.get_info_boost(user.id, name)
+
     async def get_by_user(
         self,
         user: Users
@@ -415,19 +416,19 @@ class Lumberjack_GameMethods:
             }
         )
 
-    async def update_energy(
+    async def restore_energy(
         self,
         game_user_id: int
         ) -> Dict:
-        return await self.api.update_energy(
+        return await self.api.restore_energy(
             game_user_id=game_user_id
         )
 
-    async def refresh_energy(
+    async def game_state(
         self,
         user: Users
         ) -> Optional[Dict]:
-        data = await self.api.refresh_energy(
+        data = await self.api.game_state(
             user_id=user.id
         )
         if data:
@@ -468,19 +469,19 @@ class GeoHunter_GameMethods:
         )
         return GeoHunter(**data) if data else None
 
-    async def update_energy(
+    async def restore_energy(
         self,
         game_user: GeoHunter
         ) -> Dict:
-        return await self.api.update_energy(
+        return await self.api.restore_energy(
             game_user_id=game_user.id
         )
 
-    async def refresh_energy(
+    async def game_state(
         self,
         user: Users
         ) -> Optional[Dict]:
-        data = await self.api.refresh_energy(
+        data = await self.api.game_state(
             user_id=user.id
         )
         if data:

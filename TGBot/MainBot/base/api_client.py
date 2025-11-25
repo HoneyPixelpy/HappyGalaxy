@@ -49,15 +49,25 @@ class DjangoAPI:
                             return content
                         except Exception as e:
                             logger.error(f"Failed to process response: {e.__class__.__name__}")
+                            # NOTE тут нужно вызывать какую-то ошибку для отлавливания в rabbitmq для повторного запроса
                             return None
                     elif response.status == 500:
-                        await InternalServerErrorClass().send(f"Неопределенная ошибка, {method} {self.base_url}{endpoint} {str(data)} {str(params)}\n\n{str(response)}")
+                        await InternalServerErrorClass().send(
+                            f"Неопределенная ошибка, {method} {self.base_url}{endpoint} {str(data)} {str(params)}\n\n{str(response)}"
+                            )
+                            # NOTE тут нужно вызывать какую-то ошибку для отлавливания в rabbitmq для повторного запроса
                     return None
         
         except TimeoutError:
-            await InternalServerErrorClass().send(f"Не ответили за 20 сек, {method} {self.base_url}{endpoint} {str(data)} {str(params)}")
+            await InternalServerErrorClass().send(
+                f"Не ответили за 20 сек, {method} {self.base_url}{endpoint} {str(data)} {str(params)}"
+                )
+                # NOTE тут нужно вызывать какую-то ошибку для отлавливания в rabbitmq для повторного запроса
         except aiohttp.ClientConnectorError:
-            await InternalServerErrorClass().send(f"Сервер не отвечает, {method} {self.base_url}{endpoint} {str(data)} {str(params)}")
+            await InternalServerErrorClass().send(
+                f"Сервер не отвечает, {method} {self.base_url}{endpoint} {str(data)} {str(params)}"
+                )
+                # NOTE тут нужно вызывать какую-то ошибку для отлавливания в rabbitmq для повторного запроса
 
     def _sync_make_request(
         self, 
@@ -98,25 +108,6 @@ class DataRequests(DjangoAPI):
 
     async def get_reward_data(self) -> Optional[Dict]:
         return await self._make_request("GET", "/reward_data/")
-
-    async def get_catalog_boosts(self, user_id: int) -> Optional[Dict]:
-        return await self._make_request(
-            "GET", 
-            "/boosts_data/catalog",
-            params={
-                'user_id': user_id
-            }
-        )
-
-    async def get_info_boost(self, user_id: int, name: str) -> Optional[Dict]:
-        return await self._make_request(
-            "GET", 
-            "/boosts_data/info",
-            params={
-                'user_id': user_id,
-                'name': name
-            }
-        )
 
 
 class UsersRequests(DjangoAPI):
@@ -280,6 +271,25 @@ class Pikmi_ShopRequests(DjangoAPI):
 
 class Sigma_BoostsRequests(DjangoAPI):
 
+    async def get_catalog_boosts(self, user_id: int) -> Optional[Dict]:
+        return await self._make_request(
+            "GET", 
+            "/sigma-boosts/catalog",
+            params={
+                'user_id': user_id
+            }
+        )
+
+    async def get_info_boost(self, user_id: int, name: str) -> Optional[Dict]:
+        return await self._make_request(
+            "GET", 
+            "/sigma-boosts/info",
+            params={
+                'user_id': user_id,
+                'name': name
+            }
+        )
+
     async def get_by_user(self, user_id: int) -> Optional[Dict]:
         return await self._make_request(
             "GET", 
@@ -334,19 +344,16 @@ class Lumberjack_GameRequests(DjangoAPI):
             user_data
             )
 
-    async def update_energy(self, game_user_id) -> Optional[Dict]:
+    async def restore_energy(self, game_user_id) -> Optional[Dict]:
         return await self._make_request(
             "PATCH", 
             f"/lumberjack-games/{game_user_id}/restore_energy/"
             )
 
-    async def refresh_energy(self, user_id: int) -> Optional[Dict]:
+    async def game_state(self, user_id: int) -> Optional[Dict]:
         return await self._make_request(
-            "GET", 
-            "/lumberjack-games/refresh_energy/",
-            params={
-                'user_id': user_id
-            }
+            "PATCH", 
+            f"/lumberjack-games/{user_id}/game_state/"
         )
 
 
@@ -365,19 +372,16 @@ class GeoHunter_GameRequests(DjangoAPI):
             user_data
             )
 
-    async def update_energy(self, game_user_id) -> Optional[Dict]:
+    async def restore_energy(self, game_user_id) -> Optional[Dict]:
         return await self._make_request(
             "PATCH", 
             f"/geo-hunter/{game_user_id}/restore_energy/"
             )
 
-    async def refresh_energy(self, user_id: int) -> Optional[Dict]:
+    async def game_state(self, user_id: int) -> Optional[Dict]:
         return await self._make_request(
-            "GET", 
-            "/geo-hunter/refresh_energy/",
-            params={
-                'user_id': user_id
-            }
+            "PATCH", 
+            f"/geo-hunter/{user_id}/game_state/"
         )
 
 

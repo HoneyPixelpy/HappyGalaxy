@@ -3,8 +3,8 @@ from aiogram import types
 import texts
 from MainBot.base.forms import Sigma_BoostsForms
 from config import debug
-from MainBot.base.models import Sigma_Boosts, Users
-from MainBot.base.orm_requests import DataMethods, Sigma_BoostsMethods
+from MainBot.base.models import Users
+from MainBot.base.orm_requests import Sigma_BoostsMethods
 from MainBot.utils.Games import LumberjackManager, GeoHuntManager
 
 
@@ -18,7 +18,7 @@ class Boosts:
         """
         Отправляем сообщение с каталогом бустов
         """
-        boosts_data: list[dict] = await DataMethods().catalog_boosts(user)
+        boosts_data: list[dict] = await Sigma_BoostsMethods().catalog_boosts(user)
         
         inline_keyboard = []
         for boost_data in boosts_data:
@@ -92,7 +92,7 @@ class Boosts:
         """
         Отправляем сообщение с информацией о конкретном бусте
         """
-        boost_info: dict = await DataMethods().info_boost(user, name)
+        boost_info: dict = await Sigma_BoostsMethods().info_boost(user, name)
         
         inline_keyboard = []
         if boost_info['boost_level'] < boost_info['max_level']:
@@ -180,14 +180,8 @@ class Boosts:
                 return
 
         if upgrade_data:
-            await LumberjackManager().force_update_energy(
-                user, 
-                refrash=False
-                )
-            await GeoHuntManager().force_update_energy(
-                user, 
-                refrash=False
-                )
+            await LumberjackManager().force_update_energy(user)
+            await GeoHuntManager().force_update_energy(user)
             try:
                 await call.answer(
                     text=texts.Boosts.Texts.success.format(

@@ -5,9 +5,11 @@ from rest_framework import status
 from rest_framework.response import Response
 from django.contrib.contenttypes.models import ContentType
 
-from ..models import AddStarcoinsBonus, Bonuses, ClickScaleBonus, EnergyRenewalBonus, Lumberjack_Game, UseBonuses, Users
+
+from ..models import AddStarcoinsBonus, Bonuses, ClickScaleBonus, EnergyRenewalBonus, GeoHunter, Lumberjack_Game, UseBonuses, Users
 from ..serializers import BonusesSerializer, LumberjackGameSerializer, UseBonusesSerializer
 from .error import RaisesResponse
+from .game import UserGameMethods
 
 
 class BonusesMethods:
@@ -79,7 +81,7 @@ class BonusesMethods:
             )
 
 
-class UseBonusesMethods:
+class UseBonusesMethods(UserGameMethods):
     @classmethod
     def get(
         cls,
@@ -148,10 +150,9 @@ class UseBonusesMethods:
             status=status.HTTP_200_OK
             )
     @classmethod
-    def create_energy_renewal(
+    def _check_expires_at(
         cls,
         bonus: Bonuses,
-        game: Lumberjack_Game,
         now: datetime
         ) -> Union[UseBonuses, Response]:
         if bonus.expires_at < now:
@@ -161,17 +162,20 @@ class UseBonusesMethods:
                 data={'text': 'not_active'},
                 status=status.HTTP_200_OK
             )
+    @classmethod
+    def activate_energy_renewal(
+        cls,
+        bonus: Bonuses,
+        lumberjack: Lumberjack_Game,
+        geohunter: GeoHunter,
+        now: datetime
+        ) -> Union[UseBonuses, Response]:
+        cls._check_expires_at(bonus, now)
         
-        # Восстанавливаем энергию
-        # if game:
-        #     game.current_energy = game.max_energy
-        #     game.last_energy_update = datetime.now()
-        #     game.save()
+        super()._restore_energy(lumberjack)
+        super()._restore_energy(geohunter)
         
         raise RaisesResponse(
-            data={
-                'text': 'success_energy_renewal',
-                "game": LumberjackGameSerializer(game).data
-            },
+            data={'text': 'success_energy_renewal'},
             status=status.HTTP_200_OK
             )

@@ -1,5 +1,5 @@
 from datetime import datetime, timedelta
-from typing import List, Optional, Union
+from typing import List, Optional, Tuple, Union
 from loguru import logger
 import pytz
 
@@ -20,6 +20,26 @@ from .abstract import *
 
 
 INTERACTIVE_INVITE_TIME = 10
+
+
+class UserGameMethods:
+    @classmethod
+    def _restore_energy(
+        cls, 
+        game: Union[GeoHunter, Lumberjack_Game],
+        name: Optional[str] = None,
+        new_max_energy: Optional[int] = None
+        ) -> None:
+        """
+        Восстанавливаем энергию
+        """
+        if name and new_max_energy and isinstance(game, Lumberjack_Game):
+            if name == 'energy_capacity_level':
+                game.max_energy = new_max_energy
+            
+        game.current_energy = game.max_energy
+        game.last_energy_update = datetime.now()
+        game.save()
 
 
 class SigmaBoostsMethods:
@@ -171,26 +191,48 @@ class SigmaBoostsMethods:
         """
         user.starcoins -= boost_data.price(boost_level)
         user.save()    
+
+
+class SigmaBoostsViewMethods(SigmaBoostsMethods, UserGameMethods, AbstractSigmaBoosts):
     @classmethod
-    def _refresh_energy(
+    def catalog(
         cls, 
-        game: Union[GeoHunter, Lumberjack_Game],
-        name: Optional[str] = None,
-        new_max_energy: Optional[int] = None
-        ) -> None:
-        """
-        Восстанавливаем энергию
-        """
-        if name and new_max_energy and isinstance(game, Lumberjack_Game):
-            if name == 'energy_capacity_level':
-                game.max_energy = new_max_energy
-            
-        game.current_energy = game.max_energy
-        game.last_energy_update = datetime.now()
-        game.save()
+        user_boosts: Sigma_Boosts
+        ) -> RaisesResponse:
+        result_data = []
+        for name, value in user_boosts.__dict__.items():
+            if "_level" in name:
+                boost_data: BoostData = getattr(boosts_data, name)
+                result_data.append(
+                    {
+                        'name': name,
+                        'value': value,
+                        'max_level': boost_data.max_level()
+                    }
+                )
 
-
-class SigmaBoostsViewMethods(AbstractSigmaBoosts, SigmaBoostsMethods):
+        raise RaisesResponse(
+            data=result_data,
+            status=status.HTTP_200_OK
+        )
+    @classmethod
+    def info(
+        cls,
+        user_boosts: Sigma_Boosts,
+        name: str
+        ) -> RaisesResponse:
+        boost_level: int = getattr(user_boosts, name)
+        boost_data: BoostData = getattr(boosts_data, name)
+        
+        raise RaisesResponse(
+            data={
+                'boost_level': boost_level,
+                'max_level': boost_data.max_level(),
+                'emoji': boost_data.emoji(boost_level),
+                'price': boost_data.price(boost_level),
+            },
+            status=status.HTTP_200_OK
+        )
     @classmethod
     def get_by_user(
         cls, 
@@ -211,7 +253,7 @@ class SigmaBoostsViewMethods(AbstractSigmaBoosts, SigmaBoostsMethods):
         full_hours = cls._calculate_elapsed_hours(user, boosts_user)
         income = cls._calculate_passive_income(boosts_user, full_hours)
         
-        cls.add_passive_income(user, boosts_user, full_hours, income)
+        cls._add_passive_income(user, boosts_user, full_hours, income)
 
         raise RaisesResponse(
             data={
@@ -240,14 +282,14 @@ class SigmaBoostsViewMethods(AbstractSigmaBoosts, SigmaBoostsMethods):
         cls._write_off_money(user, boost_data, boost_level)
         
         if jack_game:
-            cls._refresh_energy(
+            cls._restore_energy(
                 jack_game,
                 name,
                 boost_data.value_by_level(boost_level+1)
                 )
         
         if geo_hunter:
-            cls._refresh_energy(geo_hunter)
+            cls._restore_energy(geo_hunter)
         
         raise RaisesResponse(
             data={
@@ -268,30 +310,141 @@ class SigmaBoostsViewMethods(AbstractSigmaBoosts, SigmaBoostsMethods):
         )
 
 
-class GameMethods:
+class GameMethods(UserGameMethods):
     @classmethod
-    def refresh_energy(
+    def _get_active_click_bonuses(
+        cls
+        ) -> List[Bonuses]:
+        """
+        Получить QuerySet активных бонусов для кликов
+        """
+        return Bonuses.objects.filter(
+            type_bonus="click_scale",
+            active=True,
+            _expires_at__gt=timezone.now()
+        ).prefetch_related(
+            Prefetch('content_type', queryset=ContentType.objects.all())
+        ).all()
+    @classmethod
+    def _is_bonus_valid(
+        cls, 
+        bonus: Bonuses, 
+        current_time: datetime
+        ) -> bool:
+        """
+        Проверить валидность бонуса
+        """
+        return bonus.expires_at < current_time
+    @classmethod
+    def _deactivate_expired_bonus(
+        cls, 
+        bonus: Bonuses
+        ) -> None:
+        """
+        Деактивировать просроченный бонус
+        """
+        bonus.active = False
+        bonus.save(update_fields=['active'])
+    @classmethod
+    def _apply_bonus_to_income(
+        cls, 
+        base_income: float, 
+        bonus: Bonuses
+        ) -> float:
+        """
+        Применить бонус к доходу
+        """
+        bonus_data = bonus.bonus_data
+        modified_income = base_income * bonus_data.value
+        return round(modified_income, 3)
+    @classmethod
+    def _get_many_seconds_passed(
+        cls,
+        game_user: Union[Lumberjack_Game, GeoHunter],
+        user_boosts: Sigma_Boosts
+        ) -> int:
+        time_passed = datetime.now(pytz.timezone('Europe/Moscow')) - game_user.last_energy_update
+        required_delay: timedelta = timedelta(
+            minutes=boosts_data.recovery_level.value_by_level(user_boosts.recovery_level)
+            )
+        return (required_delay - time_passed).total_seconds()
+    @classmethod
+    def _сheck_overdue_time(
+        cls,
+        game_user: Union[Lumberjack_Game, GeoHunter],
+        first_click: bool,
+        total_seconds: int
+        ) -> Tuple[bool, int]:
+        """
+        Обрабатываем случай, когда время уже прошло
+        """
+        if (total_seconds + 30) < 0 and not first_click:
+            total_seconds = 0
+            super()._restore_energy(game_user)
+            return True, total_seconds
+        else:
+            return False, total_seconds
+    @classmethod
+    def _build_time_str(
+        cls,
+        total_seconds: int
+        ) -> str:
+        """
+        Получаем строку времени
+        """
+        hours, remainder = divmod(int(total_seconds), 3600)
+        minutes, seconds = divmod(int(remainder), 60)
+        return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+    @classmethod
+    def _enough_energy_now(
+        cls,
+        game_user: Union[Lumberjack_Game, GeoHunter],
+        energy_in_click: int
+        ) -> int:
+        """
+        Проверяет энергию есть ли энергия в игре
+        """
+        if game_user.current_energy < energy_in_click:
+            raise RaisesResponse(
+                data={'error': 'Not enough energy'}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+    @classmethod
+    def _reference_point_last_energy_update(
+        cls,
+        game_user: Union[Lumberjack_Game, GeoHunter],
+        game_user_two: Union[Lumberjack_Game, GeoHunter],
+        ) -> int:
+        """
+        Обновляем точку отсчета при полной энергии
+        """
+        if game_user.current_energy == game_user.max_energy:
+            game_user.last_energy_update = datetime.now()
+            game_user_two.last_energy_update = datetime.now()
+            game_user_two.save()
+
+
+class GameView(GameMethods):
+    @classmethod
+    def game_state(
         cls,
         game_user: Union[Lumberjack_Game, GeoHunter],
         user_boosts: Sigma_Boosts
         ) -> Response:
-        """Обновляет энергию"""
-        force_update_energy = False
         first_click = game_user.current_energy == game_user.max_energy
         
-        time_passed = datetime.now(pytz.timezone('Europe/Moscow')) - game_user.last_energy_update
-
-        required_delay: timedelta = timedelta(
-            minutes=boosts_data.recovery_level.value_by_level(user_boosts.recovery_level)
+        total_seconds = super()._get_many_seconds_passed(
+            game_user, 
+            user_boosts
             )
-        total_seconds = (required_delay - time_passed).total_seconds()
-        if (total_seconds + 30) < 0 and not first_click:
-            total_seconds = 0  # или обработать случай, когда время уже прошло
-            force_update_energy = True
-
-        hours, remainder = divmod(int(total_seconds), 3600)  # Преобразуем в int перед divmod
-        minutes, seconds = divmod(int(remainder), 60)       # Аналогично здесь
-        time_str = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+        force_update_energy, total_seconds = super()._сheck_overdue_time(
+            game_user, 
+            first_click, 
+            total_seconds
+            )
+        time_str = super()._build_time_str(
+            total_seconds
+            )
             
         raise RaisesResponse(
             data={
@@ -304,62 +457,35 @@ class GameMethods:
             status=status.HTTP_200_OK
         )
     @classmethod
+    def apply_click_bonuses(
+        cls, 
+        base_income: float
+        ) -> float:
+        """
+        Применяет все активные бонусы к доходу за клик
+        """
+        current_time = datetime.now(pytz.timezone('Europe/Moscow'))
+
+        for bonus in super()._get_active_click_bonuses():
+            # Проверяем срок действия
+            if super()._is_bonus_valid(bonus, current_time):
+                super()._deactivate_expired_bonus(bonus)
+                continue
+
+            return super()._apply_bonus_to_income(base_income, bonus)
+        return base_income
+    @classmethod
     def check_energy(
         cls,
-        boosts_user: Sigma_Boosts,
         game_user: Union[Lumberjack_Game, GeoHunter],
         game_user_two: Union[Lumberjack_Game, GeoHunter],
         energy_in_click: int
         ) -> int:
         """
         Проверяет энергию
-        Получаем награду за клик
         """
-        if game_user.current_energy < energy_in_click:
-            raise RaisesResponse(
-                data={'error': 'Not enough energy'}, 
-                status=status.HTTP_400_BAD_REQUEST
-            )
-            
-        if game_user.current_energy == game_user.max_energy:
-            game_user.last_energy_update = datetime.now()
-            game_user_two.last_energy_update = datetime.now()
-            game_user_two.save()
-
-        return cls._apply_click_bonuses(
-            boosts_data.income_level.value_by_level(boosts_user.income_level)
-            )
-    @classmethod
-    def _apply_click_bonuses(
-        cls, 
-        base_income: float
-        ) -> float:
-        """Применяет все активные бонусы к доходу за клик"""
-        current_time = datetime.now(pytz.timezone('Europe/Moscow'))
-        active_bonuses = Bonuses.objects.filter(
-            type_bonus="click_scale",
-            active=True,
-            _expires_at__gt=timezone.now()
-        ).prefetch_related(
-            Prefetch('content_type', queryset=ContentType.objects.all())
-        ).all()
-
-        for bonus in active_bonuses:
-            # Проверяем срок действия
-            if bonus.expires_at < current_time:
-                bonus.active = False
-                bonus.save()
-                continue
-            logger.debug(base_income)
-            logger.debug(bonus.bonus_data)
-            logger.debug(bonus.bonus_data.value)
-            # Применяем бонус
-            bonus_data = bonus.bonus_data
-            base_income *= bonus_data.value
-            logger.debug(base_income)
-            break  # Применяем только первый активный бонус
-
-        return round(base_income, 3)
+        super()._enough_energy_now(game_user, energy_in_click)
+        super()._reference_point_last_energy_update(game_user, game_user_two)
     @classmethod
     def restore_energy(
         cls,
@@ -369,13 +495,8 @@ class GameMethods:
         """
         Полностью восстанавливает энергию игрока
         """
-        game_user.current_energy = game_user.max_energy
-        game_user.last_energy_update = datetime.now()
-        game_user.save()
-        
-        game_user_two.current_energy = game_user_two.max_energy
-        game_user_two.last_energy_update = datetime.now()
-        game_user_two.save()
+        super()._restore_energy(game_user)
+        super()._restore_energy(game_user_two)
 
         raise RaisesResponse(
             data={
@@ -386,8 +507,82 @@ class GameMethods:
             },
             status=status.HTTP_200_OK
         )
+    @classmethod
+    def _update_grid(
+        cls, 
+        game_user: Union[Lumberjack_Game, GeoHunter],
+        grid: Optional[List[List[str]]]
+        ):
+        game_user.current_grid = grid
+        game_user.save()
+    @classmethod
+    def _check_grid_format(
+        cls, 
+        grid: Optional[List[List[str]]]
+        ):
+        if not isinstance(grid, list) or len(grid) != 4 or any(len(row) != 5 for row in grid):
+            raise RaisesResponse(
+                data={'error': 'Grid must be 4x5 matrix'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+    @classmethod
+    def _process_lumberjack_click(
+        cls, 
+        user: Users,
+        game_user: Lumberjack_Game,
+        game_user_two: GeoHunter,
+        income_per_click: int,
+        energy_in_click: int,
+        row: int,
+        col: int
+        ) -> None:
+        """
+        Обрабатывает клик в кликере
+        """
+        game_user.total_clicks += 1
+        game_user.current_grid[row][col] = str(income_per_click)
+        game_user.total_currency += income_per_click
+        game_user.current_energy -= energy_in_click
+        game_user.save()
+        
+        if game_user_two.current_energy > 0:
+            game_user_two.current_energy -= energy_in_click
+            game_user_two.save()
+        
+        user.starcoins += income_per_click
+        user.save()
+    @classmethod
+    def _process_geohunter_click(
+        cls, 
+        user: Users,
+        game_user: Lumberjack_Game,
+        game_user_two: GeoHunter,
+        income_per_click: int,
+        energy_in_click: int,
+        user_choice: bool
+        ) -> None:
+        """
+        Обрабатывает клик в геохантере
+        """
+        game_user.current_energy -= energy_in_click
+        
+        if user_choice:
+            game_user.total_true += 1
+            game_user.total_currency += income_per_click
 
-class LumberjackGameMethods(GameMethods):
+            user.starcoins += income_per_click
+            user.save()
+        else:
+            game_user.total_false += 1
+
+        game_user.save()
+        
+        if game_user_two.current_energy > 0:
+            game_user_two.current_energy -= energy_in_click
+            game_user_two.save()
+
+
+class LumberjackGameViewMethods(GameView, AbstractLumberjackGame, AbstractGame):
     @classmethod
     def get(
         cls, 
@@ -407,6 +602,31 @@ class LumberjackGameMethods(GameMethods):
         """Получить кликеры"""
         return Lumberjack_Game.objects.all()
     @classmethod
+    def retrieve(
+        cls, 
+        game: Lumberjack_Game
+        ) -> RaisesResponse:
+        raise RaisesResponse(
+            LumberjackGameSerializer(game).data,
+            status=status.HTTP_200_OK
+            )
+    @classmethod
+    def active_games(
+        cls, 
+        games: List[Lumberjack_Game]
+        ) -> RaisesResponse:
+        raise RaisesResponse(
+            LumberjackGameSerializer(games, many=True).data,
+            status=status.HTTP_200_OK
+            )
+    @classmethod
+    def game_state(
+        cls, 
+        game_user: Lumberjack_Game,
+        user_boosts: Sigma_Boosts
+        ) -> RaisesResponse:
+        super().game_state(game_user, user_boosts)
+    @classmethod
     def update_grid(
         cls,
         game_user: Lumberjack_Game,
@@ -415,15 +635,8 @@ class LumberjackGameMethods(GameMethods):
         """
         Обновляет игровое поле пользователя
         """
-        # Проверяем что grid имеет правильный формат (4x5)
-        if not isinstance(grid, list) or len(grid) != 4 or any(len(row) != 5 for row in grid):
-            raise RaisesResponse(
-                data={'error': 'Grid must be 4x5 matrix'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-            
-        game_user.current_grid = grid
-        game_user.save()
+        super()._check_grid_format(grid)
+        super()._update_grid(game_user, grid)
         
         raise RaisesResponse(
             data=LumberjackGameSerializer(game_user).data,
@@ -439,41 +652,47 @@ class LumberjackGameMethods(GameMethods):
         energy_in_click: int,
         row: int,
         col: int
-        ) -> Response:
+        ) -> RaisesResponse:
         """
-        Обрабатывает клик в игре с учетом всех бустов и обновляет состояние
+        Обрабатывает клик в игре с учетом всех бустов
         """
-        income_per_click = super().check_energy(
-            boosts_user,
+        super().check_energy(
             game_user,
             game_user_two,
             energy_in_click
         )
         
-        # Основная логика обработки клика
-        game_user.total_clicks += 1
+        income_per_click =  super().apply_click_bonuses(
+            boosts_data.income_level.value_by_level(boosts_user.income_level)
+            )
         
-        # Обновление игрового состояния
-        game_user.current_grid[row][col] = str(income_per_click)
-        game_user.total_currency += income_per_click
-        game_user.current_energy -= energy_in_click
-        
-        # Получаем игровые данные пользователя
-        if game_user_two.current_energy > 0:
-            game_user_two.current_energy -= energy_in_click
-            game_user_two.save()
-        
-        user.starcoins += income_per_click
-        
-        game_user.save()
-        user.save()
+        super()._process_lumberjack_click(
+            user,
+            game_user,
+            game_user_two,
+            income_per_click,
+            energy_in_click,
+            row,
+            col
+        )
         
         raise RaisesResponse(
             data=income_per_click,
             status=status.HTTP_200_OK
             )
+    @classmethod
+    def restore_energy(
+        cls,
+        game_user: Lumberjack_Game,
+        game_user_two: GeoHunter
+        ) -> RaisesResponse:
+        """
+        Восстанавливает энергию игрока
+        """
+        super().restore_energy(game_user, game_user_two)
 
-class GeoHunterMethods(GameMethods):
+
+class GeoHunterViewMethods(GameView, AbstractGame):
     @classmethod
     def get(
         cls, 
@@ -497,6 +716,31 @@ class GeoHunterMethods(GameMethods):
         """Получить геохантеры"""
         return GeoHunter.objects.all()
     @classmethod
+    def retrieve(
+        cls, 
+        game: GeoHunter
+        ) -> RaisesResponse:
+        raise RaisesResponse(
+            GeoHunterSerializer(game).data,
+            status=status.HTTP_200_OK
+            )
+    @classmethod
+    def active_games(
+        cls, 
+        games: List[GeoHunter]
+        ) -> RaisesResponse:
+        raise RaisesResponse(
+            GeoHunterSerializer(games, many=True).data,
+            status=status.HTTP_200_OK
+            )
+    @classmethod
+    def game_state(
+        cls, 
+        game_user: Sigma_Boosts,
+        user_boosts: Lumberjack_Game
+        ) -> RaisesResponse:
+        super().game_state(game_user, user_boosts)
+    @classmethod
     def process_click(
         cls, 
         user: Users,
@@ -505,86 +749,46 @@ class GeoHunterMethods(GameMethods):
         boosts_user: Sigma_Boosts,
         energy_in_click: int,
         user_choice: int
-        ) -> Response:
+        ) -> RaisesResponse:
         """
-        Обрабатывает клик в игре с учетом всех бустов и обновляет состояние
+        Обрабатывает клик в игре с учетом всех бустов
         """
-        income_per_click = super().check_energy(
-            boosts_user,
+        super().check_energy(
             game_user,
             game_user_two,
             energy_in_click
         )
 
-        game_user.current_energy -= energy_in_click
-        
-        # Получаем игровые данные пользователя
-        if game_user_two.current_energy > 0:
-            game_user_two.current_energy -= energy_in_click
-            game_user_two.save()
-        
-        if user_choice:            
-            # Обновление игрового состояния
-            game_user.total_true += 1
-            game_user.total_currency += income_per_click
-            user.starcoins += income_per_click
+        income_per_click =  super().apply_click_bonuses(
+            boosts_data.income_level.value_by_level(boosts_user.income_level)
+            )
 
-            game_user.save()
-            user.save()
-
-        else:
-            game_user.total_false += 1
-            game_user.save()
-
-        return GeoHunterSerializer(game_user).data
-
-class BoostsMethods:
-    @classmethod
-    def catalog(
-        cls, 
-        user_boosts: Sigma_Boosts
-        ) -> Response:
-        """
-        Получаем данные для вознаграждений
-        """
-        result_data = []
-        for name, value in user_boosts.__dict__.items():
-            if "_level" in name:
-                boost_data: BoostData = getattr(boosts_data, name)
-                result_data.append(
-                    {
-                        'name': name,
-                        'value': value,
-                        'max_level': boost_data.max_level()
-                    }
-                )
+        super()._process_geohunter_click(
+            user,
+            game_user,
+            game_user_two,
+            income_per_click,
+            energy_in_click,
+            user_choice
+        )
 
         raise RaisesResponse(
-            data=result_data,
+            GeoHunterSerializer(game_user).data,
             status=status.HTTP_200_OK
-        )
+            )
     @classmethod
-    def info(
+    def restore_energy(
         cls,
-        user_boosts: Sigma_Boosts,
-        name: str
-        ):
+        game_user: GeoHunter,
+        game_user_two: Lumberjack_Game
+        ) -> RaisesResponse:
         """
-        Получаем данные для вознаграждений
+        Восстанавливает энергию игрока
         """
-        boost_level: int = getattr(user_boosts, name)
-        boost_data: BoostData = getattr(boosts_data, name)
-        
-        raise RaisesResponse(
-            data={
-                'boost_level': boost_level,
-                'max_level': boost_data.max_level(),
-                'emoji': boost_data.emoji(boost_level),
-                'price': boost_data.price(boost_level),
-            },
-            status=status.HTTP_200_OK
-        )
+        super().restore_energy(game_user, game_user_two)
 
+
+# NOTE новая фича
 class InteractiveGameMethods:
     @classmethod
     def get(

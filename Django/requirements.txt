@@ -38,3 +38,10 @@ redis
 django-redis
 psycopg2-binary
 django-environ
+pytest
+pytest-asyncio
+mimesis
+pytest-django
+pika
+aio-pika
+pika-stubs
