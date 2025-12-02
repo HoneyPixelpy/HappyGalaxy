@@ -59,6 +59,12 @@ class UserRequests(DjangoAPI):
         return self._make_request("GET", "/users/unregistered_users/")
 
 
+class AggregatorRequests(DjangoAPI):
+
+    def aggregate_data(self) -> Optional[Dict]:
+        return self._make_request("POST", "/aggregation-daily-stats/pipeline/")
+
+
 class QuestModerationAttemptRequests(DjangoAPI):
 
     def old_quest_attempts(self) -> Optional[Any]:

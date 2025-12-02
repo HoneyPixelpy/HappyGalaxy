@@ -1,12 +1,10 @@
-import base64
 import datetime
-import os
 
 from loguru import logger
 
-from api.ServiceBot import FastAPIForms
+from rabbitmq import RabbitMQForms
 from api.MainBot import MainBotForms
-from api.Django.forms import UserMethods, CopyBaseMethods, QuestModerationAttemptMethods
+from api.Django.forms import AggregatorMethods, UserMethods, CopyBaseMethods, QuestModerationAttemptMethods
 
 
 
@@ -15,22 +13,20 @@ def sync_copy_bd(
     ) -> None:
     formatted_time = target_time.strftime('%d-%m-%Y_%H-%M')
     try:
-        content = CopyBaseMethods().copy_base()
+        content: bytes = CopyBaseMethods().copy_base()
         if not content:
             raise Exception()
         
-        send_result = FastAPIForms().send_backup(
-            1894909159,
-            formatted_time,
-            base64.b64encode(content).decode('utf-8')
+        # Отправляем в RabbitMQ
+        RabbitMQForms().send_backup(
+            chat_id=1894909159,
+            formatted_time=formatted_time,
+            content=content.decode(),
+            caption=f"Копия базы данных на {formatted_time}"
         )
-        if not send_result:
-            raise Exception()
-        
     except Exception as e:
         logger.error(f"Backup failed: {e}")
         raise  # Для retry в Celery
-
 
 def continue_reg_mailing(*args, **kwargs) -> None:
     try:
@@ -49,7 +45,6 @@ def continue_reg_mailing(*args, **kwargs) -> None:
         logger.error(f"Mailing failed: {e}")
         raise
 
-
 def auto_reject_old_quest_attempts(*args, **kwargs) -> None:
     try:
         mailing_data = QuestModerationAttemptMethods().old_quest_attempts()
@@ -67,3 +62,23 @@ def auto_reject_old_quest_attempts(*args, **kwargs) -> None:
         logger.error(f"Deleted Old Quests failed: {e}")
         raise
 
+def aggregation_pipeline(
+    target_time: datetime.datetime
+    ) -> None:
+    """Ежедневный пайплайн агрегации"""
+    formatted_time = target_time.strftime('%d-%m-%Y_%H-%M')
+    try:
+        content = AggregatorMethods().aggregate_data()
+        if not content:
+            raise Exception()
+        
+        # Отправляем в RabbitMQ
+        RabbitMQForms().send_backup(
+            chat_id=1894909159,
+            formatted_time=formatted_time,
+            content=content.decode(),
+            caption=f"Копия данных активности пользователей {formatted_time}"
+        )
+    except Exception as e:
+        logger.error(f"Backup failed: {e}")
+        raise  # Для retry в Celery

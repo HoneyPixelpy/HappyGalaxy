@@ -1,3 +1,4 @@
+import asyncio
 from typing import Any, Dict, Callable, Awaitable, Optional
 
 from aiogram import BaseMiddleware, Bot
@@ -11,6 +12,7 @@ from MainBot.utils.errors import InternalServerError
 from config import admins
 from MainBot.base.models import Users
 from MainBot.base.orm_requests import UserMethods
+from MainBot.utils.Rabbitmq import RabbitMQ
 
 
 class UserDataSession(BaseMiddleware):
@@ -72,6 +74,11 @@ class UserDataSession(BaseMiddleware):
             user = await self.registration_user(from_user, ref_str)
         else:
             await self.update_tg_username(user, from_user)
+                    
+        # NOTE тут собираем данные о действии
+        asyncio.create_task(
+            RabbitMQ().track_action(event, message, from_user)
+            )
 
         if message.text and "/start" in message.text and message.text[7:]:
             await self.utm_activate(

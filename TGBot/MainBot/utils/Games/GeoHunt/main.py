@@ -21,6 +21,7 @@ from MainBot.config import bot
 from Redis.main import RedisManager
 from config import BASE_DIR
 import texts
+from MainBot.utils.Rabbitmq import RabbitMQ
 
 
 
@@ -439,6 +440,13 @@ class GeoHuntMain(Build):
         
         # Обрабатываем клик
         game_user = await GeoHunter_GameMethods().process_click(user, user_choice)
+        
+        if game_user:
+            await RabbitMQ().track_game(
+                user.user_id,
+                round((game_user.user.starcoins - user.starcoins),2) if user_choice else 0,
+                "geohunter"
+            )
         
         if user_choice:
             try:

@@ -1,7 +1,7 @@
 
 
 from typing import Any, Dict, List
-from .requests import CopyBaseRequests, UserRequests, QuestModerationAttemptRequests
+from .requests import AggregatorRequests, CopyBaseRequests, UserRequests, QuestModerationAttemptRequests
 
 
 class CopyBaseMethods:
@@ -24,6 +24,17 @@ class UserMethods:
         self,
         ) -> List[int]:
         return self.api.unregistered_users()
+
+
+class AggregatorMethods:
+    
+    def __init__(self):
+        self.api = AggregatorRequests()
+
+    def aggregate_data(
+        self,
+        ) -> List[int]:
+        return self.api.aggregate_data()
 
 
 class QuestModerationAttemptMethods:

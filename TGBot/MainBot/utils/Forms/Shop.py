@@ -16,6 +16,7 @@ from MainBot.base.orm_requests import Pikmi_ShopMethods, PurchasesMethods, UserM
 from MainBot.keyboards.reply import KB as reply
 from MainBot.keyboards.inline import IKB as inline
 from Redis.main import RedisManager
+from MainBot.utils.Rabbitmq import RabbitMQ
 
 
 
@@ -283,6 +284,11 @@ class Shop(ShopPagination):
                     referral_count=await UserMethods().get_referral_count(user.user_id)
                 )
             )
+            
+            await RabbitMQ().track_shop(
+                user.user_id,
+                product.id
+                )
         else:
             try:
                 await call.message.answer(

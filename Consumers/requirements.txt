@@ -3,5 +3,7 @@ pydantic==2.11.7
 pydantic_core==2.33.2
 python-dateutil
 python-dotenv==1.1.1
-uvicorn
-fastapi
+pika
+aio-pika
+loguru
+confluent-kafka

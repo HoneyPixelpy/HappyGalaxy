@@ -26,9 +26,9 @@ app = Celery(
     timezone='Europe/Moscow'
 )
 
-# DEBUG = os.getenv('DEBUG')
+DEBUG = os.getenv('DEBUG')
 
-# NOTE celery -A main worker -Q copy_base,continue_registration,quest_attempts -l info
+# NOTE celery -A main worker -Q copy_base,continue_registration,quest_attempts,aggregation-pipeline -l info
 # NOTE celery -A main beat -l info
 app.conf.beat_schedule = {
     'daily-db-backup': {
@@ -52,6 +52,14 @@ app.conf.beat_schedule = {
         'schedule': crontab(minute=0, hour='*'), # crontab(hour=10) crontab(minute='*/1')
         'options': {
             'queue': 'quest_attempts',
+            'expires': 3600  # Задача исчезнет, если не взята в работу за пол часа
+        }
+    },
+    'aggregation-pipeline': {
+        'task': 'utils.tasks.aggregation_pipeline_task',
+        'schedule': crontab(minute='*/1') if DEBUG else crontab(minute=0, hour=4), # crontab(hour=10) crontab(minute='*/1')
+        'options': {
+            'queue': 'aggregation_pipeline',
             'expires': 3600  # Задача исчезнет, если не взята в работу за пол часа
         }
     }

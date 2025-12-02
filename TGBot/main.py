@@ -38,6 +38,9 @@ async def test():
 async def run_bot():
     """Асинхронный запуск Telegram бота"""
     # asyncio.create_task(Tasks().create_task_from_database_copy()) # NOTE копируем базу данных
+    """
+    Эти таски должны убраться в Celery и RabbitMQ
+    """
     asyncio.create_task(handle_rang_notifications())
     asyncio.create_task(handle_continue_registration_mailing())
     asyncio.create_task(handle_auto_reject_old_quest_attempts())

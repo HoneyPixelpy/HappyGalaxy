@@ -23,6 +23,7 @@ from MainBot.base.orm_requests import QuestsMethods, UseQuestsMethods, UserMetho
 from MainBot.utils.MyModule import Func
 from VKBot import VKForms
 from MainBot.config import bot
+from MainBot.utils.Rabbitmq import RabbitMQ
 
 
 lock = asyncio.Lock()
@@ -131,7 +132,8 @@ class DailyQuest:
                 return await self.fast_success(
                     call,
                     user,
-                    quest_id
+                    quest_id,
+                    daily_quest.title
                 )
             elif daily_quest.type.value == "content":
                 text = texts.Quests.Texts.idea_call_action.format(
@@ -230,6 +232,16 @@ class DailyQuest:
                 f"{success_admin} -> {user.user_id}"
             )
 
+            reward_starcoins_bool = await UseQuestsMethods().create_idea_daily(
+                user.id,
+                state_data['id']
+            )
+            if not reward_starcoins_bool:
+                await message.answer(
+                    text=texts.Error.Notif.server_error,
+                )
+                return
+
             send_message = await Func.constructor_func_to_mailing_msgs(
                 message.bot,
                 msg_datas['text'],
@@ -267,14 +279,15 @@ class DailyQuest:
             )
             await state.clear()
             
-            reward_starcoins_bool = await UseQuestsMethods().create_idea_daily(
-                user.id,
-                state_data['id']
-            )
-
             await send_message(
                 user_obj
             )
+            
+            await RabbitMQ().track_quest(
+                user.user_id,
+                state_data['id'],
+                action="pending"
+                )
 
             if type(reward_starcoins_bool) in [float,int]:
                 await message.answer(
@@ -307,17 +320,58 @@ class DailyQuest:
         self,
         call: types.CallbackQuery,
         user: Users,
-        quest_id: str
+        quest_id: str,
+        title: str
         ) -> Optional[bool]:
-        target_user = await UserMethods().get_by_user_id(user.user_id)
+        # target_user = await UserMethods().get_by_user_id(user.user_id)
         
-        reward_starcoins = await UseQuestsMethods().create_idea_daily(target_user.id, quest_id)
+        reward_starcoins = await UseQuestsMethods().create_idea_daily(user.id, quest_id)
+        if not reward_starcoins:
+            await call.bot.send_message(
+                chat_id=user.user_id,
+                text=texts.Error.Notif.server_error,
+            )
+            return
+        
         try:
-            await call.answer(
-                text=f"✅ +{reward_starcoins}★ ✅"
+            # await call.answer(
+            #     text=f"✅ +{reward_starcoins}★ ✅"
+            #     )
+            await call.bot.send_message(
+                chat_id=user.user_id,
+                text=texts.Quests.Texts.fast_approve.format(
+                    starcoins=reward_starcoins
+                    )
                 )
         except:
             pass
+        try:
+            await call.bot.send_message(
+                chat_id=config.quests_chat,
+                text=texts.Quests.Texts.log_idea_success.format(
+                    tg_info=await Func.format_tg_info(user.user_id, user.tg_username),
+                    title_quest=title + f" +{reward_starcoins}★",
+                    role=user.role_name,
+                    gender=await Func.gender_name(user.gender, user.role_private),
+                    age=(datetime.now(pytz.timezone('Europe/Moscow')) - user.age).days // 365,
+                    title="Имя" if user.role_private == "child" else "ФИО",
+                    supername=user.supername,
+                    name=user.name,
+                    nickname=user.nickname,
+                    phone=user.phone,
+                    created_at=await Func.format_date(user.created_at),
+                    referral_count=await UserMethods().get_referral_count(user.user_id)
+                )
+            )
+        except:
+            pass
+        
+        await RabbitMQ().track_quest(
+            user.user_id,
+            quest_id,
+            action="fast_success"
+            )
+        
         return True
             
     
@@ -474,6 +528,16 @@ class IdeaQuest:
                 f"{success_admin} -> {user.user_id}"
             )
             
+            reward_starcoins_bool = await UseQuestsMethods().create_idea_daily(
+                user.id,
+                state_data['id']
+            )
+            if not reward_starcoins_bool:
+                await message.answer(
+                    text=texts.Error.Notif.server_error,
+                )
+                return
+
             send_message = await Func.constructor_func_to_mailing_msgs(
                 message.bot,
                 msg_datas['text'],
@@ -511,14 +575,15 @@ class IdeaQuest:
             )
             await state.clear()
             
-            reward_starcoins_bool = await UseQuestsMethods().create_idea_daily(
-                user.id,
-                state_data['id']
-            )
-
             await send_message(
                 user_obj
             )
+            
+            await RabbitMQ().track_quest(
+                user.user_id,
+                state_data['id'],
+                action="pending"
+                )
             
             if type(reward_starcoins_bool) in [float,int]:
                 await message.answer(
@@ -569,6 +634,11 @@ class IdeaQuest:
             await call.answer(
                 text="✅ Все сделано ✅"
                 )
+            await RabbitMQ().track_quest(
+                user.user_id,
+                quest_id,
+                action="approved"
+                )
         else:
             await call.answer(
                 text=texts.Quests.Texts.already
@@ -617,6 +687,11 @@ class IdeaQuest:
                     ]
                 )
             )
+            await RabbitMQ().track_quest(
+                user.user_id,
+                quest_id,
+                action="rejected"
+                )
         else:
             await Func.send_error_to_developer(
                 f"user_id={user_id} quest_id={quest_id}\nНажали на кноку отклонить но связи юзера и квеста НЕТ\n{quest_data}"
@@ -894,6 +969,13 @@ class SubscribeQuests:
                 referral_count=await UserMethods().get_referral_count(user.user_id)
             )
         )
+
+        if sub_quest:
+            await RabbitMQ().track_quest(
+                user.user_id,
+                quest.id,
+                action="approved"
+                )
 
 
 class Quests(SubscribeQuests, IdeaQuest, DailyQuest, QuestPagination):

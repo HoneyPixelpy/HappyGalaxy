@@ -40,6 +40,7 @@ router.register(r'quest-moderation-attempt', QuestModerationAttemptViewSet, base
 router.register(r'promocodes', PromocodesViewSet, basename='promocodes')
 router.register(r'management-link', ManagementLinksViewSet, basename='management-link')
 router.register(r'interactive-game', InteractiveGameViewSet, basename='interactive-game')
+router.register(r'aggregation-daily-stats', AggregatorDailyStatsViewSet, basename='aggregation-daily-stats')
 
 
 urlpatterns = [

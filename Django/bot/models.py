@@ -1,7 +1,7 @@
 from datetime import datetime, timezone as datetime_timezone
 import random
 import string
-from typing import Optional
+from typing import Optional, Union
 from zoneinfo import ZoneInfo
 
 from django.db import models
@@ -376,7 +376,7 @@ class Lumberjack_Game(BaseModel):
         related_name='games',
         verbose_name="Игрок"
         )
-    game_date = models.DateTimeField(auto_now_add=True)
+    game_date = models.DateTimeField(auto_now_add=True) # NOTE ненужен
     current_energy = models.IntegerField(default=0, verbose_name="Текущая энергия")
     max_energy = models.IntegerField(default=0, verbose_name="Макс. энергия")
     _last_energy_update = models.DateTimeField(default=timezone.now, db_column='last_energy_update')  # Последнее обновление энергии
@@ -430,7 +430,7 @@ class GeoHunter(BaseModel):
         related_name='geo_hunter',
         verbose_name="Игрок"
         )
-    game_date = models.DateTimeField(auto_now_add=True, verbose_name="Дата создания игры")
+    game_date = models.DateTimeField(auto_now_add=True, verbose_name="Дата создания игры") # NOTE ненужен
     current_energy = models.IntegerField(default=0, verbose_name="Текущая энергия")
     max_energy = models.IntegerField(default=0, verbose_name="Макс. энергия")
     _last_energy_update = models.DateTimeField(default=timezone.now, db_column='last_energy_update')  # Последнее обновление энергии
@@ -1170,3 +1170,262 @@ class GameData(BaseModel):
     
     def __str__(self):
         return f"{self.user} - {self.game} - {self.result}"
+
+
+class AnalyticsSummary(BaseModel):
+    date = models.DateField(unique=True)
+
+    total_users = models.IntegerField(default=0)
+    total_messages = models.IntegerField(default=0)
+    total_callbacks = models.IntegerField(default=0)
+
+    class Meta:
+        db_table = 'analytics_summary'
+        verbose_name = 'Analytics Summary'
+        verbose_name_plural = 'Analytics Summary'
+    
+    def __str__(self):
+        return f"Analytics for {self.date}"
+
+
+class BaseUserAction(BaseModel):
+    user_id = models.BigIntegerField()  # ID пользователя
+    timestamp = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        verbose_name = 'User Action'
+        verbose_name_plural = 'User Actions'
+        abstract = True
+        indexes = [
+            models.Index(fields=['summary', 'timestamp']),
+            models.Index(fields=['user_id', 'timestamp']),
+            models.Index(fields=['timestamp']),
+        ]
+
+
+class MessageAction(BaseUserAction):
+    summary = models.ForeignKey(
+        AnalyticsSummary,
+        on_delete=models.CASCADE,
+        related_name='message_actions' # message_action
+    )
+
+    text = models.TextField(blank=True, null=True)
+    content_type = models.CharField(max_length=50)  # text, photo, document etc.
+    message_length = models.IntegerField(default=0)  # Длина сообщения в символах
+    
+    class Meta:
+        db_table = 'user_message_actions'
+
+
+class CallbackAction(BaseUserAction):
+    summary = models.ForeignKey(
+        AnalyticsSummary,
+        on_delete=models.CASCADE,
+        related_name='callback_action' 
+    )
+
+    text = models.CharField(max_length=200)
+    data = models.CharField(max_length=200)
+    
+    class Meta:
+        db_table = 'user_callback_actions'
+        indexes = BaseUserAction.Meta.indexes + [
+            models.Index(fields=['data']),
+        ]
+
+
+class UnifiedUserAction(models.Model):
+    id = models.CharField(primary_key=True, max_length=50)
+    user_id = models.BigIntegerField()
+    timestamp = models.DateTimeField()
+    action_type = models.CharField(max_length=20)
+    content = models.TextField()
+    
+    class Meta:
+        managed = False
+        db_table = 'user_actions_unified'
+
+
+class DailyUserStats(BaseModel):
+    summary = models.ForeignKey(
+        AnalyticsSummary, 
+        on_delete=models.CASCADE,
+        related_name='user_stats'
+    )
+    user_id = models.BigIntegerField()
+    
+    # Основные метрики
+    message_count = models.IntegerField(default=0)
+    callback_count = models.IntegerField(default=0)
+    total_actions = models.IntegerField(default=0)
+    
+    # Метрики сообщений
+    avg_message_length = models.FloatField(default=0)
+    message_types = models.JSONField(default=dict)  # {"text": 5, "photo": 2, ...}
+    
+    # Временные метрики
+    first_action = models.DateTimeField()
+    last_action = models.DateTimeField()
+    active_hours = models.JSONField(default=list)
+    
+    # Частота действий
+    actions_per_hour = models.FloatField(default=0)
+    peak_activity_hour = models.IntegerField(null=True)  # Час с максимальной активностью (0-23)
+    
+    # Поведенческие метрики
+    popular_buttons = models.JSONField(default=list)  # Топ-5 кнопок пользователя
+    
+    class Meta:
+        unique_together = ['summary', 'user_id']
+        verbose_name = 'Daily User Statistics'
+        verbose_name_plural = 'Daily User Statistics'
+
+
+class DailyButtonStats(BaseModel):
+    summary = models.ForeignKey(
+        AnalyticsSummary, 
+        on_delete=models.CASCADE,
+        related_name='button_stats'
+    )
+    button_text = models.CharField(max_length=200)
+    button_data = models.CharField(max_length=100)
+    
+    # Основные метрикиDailyButtonStats
+    total_clicks = models.IntegerField(default=0)
+    unique_users = models.IntegerField(default=0)
+    
+    # Временные метрики
+    first_click = models.DateTimeField()
+    last_click = models.DateTimeField()
+    click_times = models.JSONField(default=list)  # Часы кликов для анализа пиков
+    
+    # Углубленные метрики
+    click_frequency = models.FloatField(default=0)  # Кликов/пользователя
+    repeat_users = models.IntegerField(default=0)  # Пользователей с >1 кликом
+    user_retention_rate = models.FloatField(default=0)  # % повторных пользователей
+    
+    # Конверсия (если есть последовательность действий)
+    avg_time_to_click = models.DurationField(null=True)  # Среднее время до клика с начала сессии
+    
+    class Meta:
+        unique_together = ['summary', 'button_data']
+        verbose_name = 'Daily Button Statistics'
+        verbose_name_plural = 'Daily Button Statistics'
+    
+    @property
+    def avg_clicks_per_user(self):
+        return self.click_frequency
+
+
+class ShopStats(BaseModel):
+    """Статистика по магазину по дням"""
+    product = models.ForeignKey(
+        Pikmi_Shop,
+        on_delete=models.CASCADE,
+        related_name='shop_stats',
+        verbose_name="Товар"
+    )
+    summary = models.ForeignKey(
+        AnalyticsSummary,
+        on_delete=models.CASCADE,
+        related_name='shop_stats',
+        verbose_name="Дата"
+    )
+    
+    items_sold = models.IntegerField(default=0, verbose_name="Всего выводов")
+    total_revenue = models.FloatField(default=0.0, verbose_name="Сумма выводов")
+    
+    unique_buyers = models.JSONField(
+        default=list, 
+        verbose_name="Уникальные пользователи"
+        ) # NOTE их будет не сильно много
+    
+    class Meta:
+        db_table = 'shop_stats'
+        verbose_name = 'Статистика магазина'
+        verbose_name_plural = 'Статистика магазина'
+        unique_together = ['product', 'summary']
+        indexes = [
+            models.Index(fields=['summary', 'product']),
+        ]
+
+    def __str__(self):
+        return f"{self.product.title} - {self.summary}"
+
+
+class QuestStats(BaseModel):
+    """Статистика по квестам по дням"""
+    quest = models.ForeignKey(
+        Quests,
+        on_delete=models.CASCADE,
+        related_name='quest_stats',
+        verbose_name="Квест"
+    )
+    summary = models.ForeignKey(
+        AnalyticsSummary,
+        on_delete=models.CASCADE,
+        related_name='quest_stats',
+        verbose_name="Дата"
+    )
+    
+    total_rewards = models.FloatField(default=0.0, verbose_name="Всего наград") # NOTE переименовать в rewards
+    attempts = models.IntegerField(default=0, verbose_name="Попыток")
+    success = models.IntegerField(default=0, verbose_name="Успешных")
+    failed = models.IntegerField(default=0, verbose_name="Неудачных")
+    unique_users = models.JSONField(
+        default=list, 
+        verbose_name="Уникальные пользователи"
+        ) # NOTE их будет не сильно много
+    
+    class Meta:
+        db_table = 'quest_stats'
+        verbose_name = 'Статистика квестов'
+        verbose_name_plural = 'Статистика квестов'
+        unique_together = ['quest', 'summary']
+        indexes = [
+            models.Index(fields=['summary', 'quest']),
+        ]
+
+    def __str__(self):
+        return f"{self.quest} - {self.summary}"
+
+
+class GamesStats(BaseModel):
+    """Статистика по игровой сессии"""
+    summary = models.ForeignKey(
+        AnalyticsSummary,
+        on_delete=models.CASCADE,
+        related_name='game_stats',
+        verbose_name="Дата"
+    )
+    
+    lumberjack_clicks = models.IntegerField(default=0, verbose_name="Кликов в кликере")
+    lumberjack_profit = models.FloatField(default=0.0, verbose_name="Доход в кликере")
+    lumberjack_unique_users = models.JSONField(
+        default=list, 
+        verbose_name="Уникальные пользователи"
+        ) # NOTE их будет не сильно много
+
+    geohunter_true = models.IntegerField(default=0, verbose_name="Успешных попаданий")
+    geohunter_false = models.IntegerField(default=0, verbose_name="Неудачных попаданий")
+    geohunter_profit = models.FloatField(default=0.0, verbose_name="Доход в геохутере")
+    geohunter_unique_users = models.JSONField(
+        default=list, 
+        verbose_name="Уникальные пользователи"
+        ) # NOTE их будет не сильно много
+
+
+    class Meta:
+        db_table = 'games_actions'
+        verbose_name = 'Статистика игр'
+        verbose_name_plural = 'Статистика игр'
+        indexes = [
+            models.Index(fields=['summary']),
+        ]
+    
+    def __str__(self):
+        return f"{self.summary} - {self.lumberjack_profit} - {self.geohunter_profit}"
+
+
+

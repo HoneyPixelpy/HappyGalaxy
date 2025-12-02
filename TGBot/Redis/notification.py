@@ -7,6 +7,8 @@ from aiogram import exceptions, types
 from loguru import logger
 from redis import Redis
 
+from MainBot.utils.Rabbitmq import RabbitMQ
+
 from .main import RedisManager
 from MainBot.config import bot
 from MainBot.keyboards.inline import IKB
@@ -126,9 +128,9 @@ async def handle_auto_reject_old_quest_attempts(*args, **kwargs) -> None:
             old_quests_data = await redis_client.lpop('bot:old_quests')
             
             if old_quests_data:
-                continue_registration = json.loads(old_quests_data)
+                auto_reject_attempts = json.loads(old_quests_data)
                 await auto_reject_old_quest_attempts(
-                    continue_registration['mailing_data']
+                    auto_reject_attempts['mailing_data']
                 )
             await asyncio.sleep(1)
             
@@ -146,6 +148,12 @@ async def auto_reject_old_quest_attempts(
         number = 0
 
         for mailing_data in mailing_datas:
+            await RabbitMQ().track_quest( # NOTE в приоритете перекинуть работу с kafka на сторону django
+                mailing_data['user_id'],
+                mailing_data['quest_id'],
+                action="auto_rejected"
+                )
+            
             try:
                 await bot.send_message(
                     chat_id=mailing_data['user_id'],

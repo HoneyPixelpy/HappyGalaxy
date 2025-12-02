@@ -8,6 +8,9 @@ from MainBot.base.forms import Lumberjack_GameForms
 from MainBot.base.orm_requests import Lumberjack_GameMethods
 from MainBot.keyboards.inline import IKB as inline
 from MainBot.utils.MyModule import Func
+from MainBot.utils.Rabbitmq import RabbitMQ
+
+
 
 class LumberjackGame:
 
@@ -186,6 +189,14 @@ class LumberjackGame:
                 pass
             
             await cls.send_call_game(call, user, success_or_income)
+            
+            if game_user:
+                await RabbitMQ().track_game(
+                    user.user_id,
+                    success_or_income,
+                    "lumberjack"
+                )
+            
         else:
             await call.answer(texts.Game.Error.miss)
         

@@ -18,6 +18,7 @@ __all__ = [
     "ManagementLinksViewSet",
     "InteractiveGameViewSet",
     "QuestModerationAttemptViewSet",
+    "AggregatorDailyStatsViewSet",
 ]
 
 from datetime import datetime
@@ -29,6 +30,7 @@ from rest_framework.response import Response
 from rest_framework.decorators import action
 from rest_framework.viewsets import ViewSet
 
+from bot.views.analytics import AggregateArchive
 from bot.service.rang import RangService
 
 from ..serializers import BonusesSerializer, \
@@ -1157,4 +1159,14 @@ class InteractiveGameViewSet(ViewSet):
         game = InteractiveGameMethods.get(pk=pk)
         
         return InteractiveGameMethods.end_game(game, winers)
+
+
+class AggregatorDailyStatsViewSet(ViewSet):
+
+    # POST /api/v1/aggregation-daily-stats/pipeline/
+    @action(detail=False, methods=['post'])
+    @queue_request
+    def pipeline(self, request):
+        return AggregateArchive().pipeline()
+
 

@@ -1,7 +1,10 @@
+from datetime import datetime
+
 from django.contrib import admin
 from django import forms
 from loguru import logger
-from .models import Bonuses, GeoHunter, IdeaQuests, ManagementLinks, Promocodes, Quests, StarcoinsPromo, SubscribeQuest, UseBonuses, UseManagementLinks, UsePromocodes, UseQuests, Users, Family_Ties, Purchases, Pikmi_Shop, Sigma_Boosts, Lumberjack_Game, Work_Keys, DailyQuests, Rangs
+
+from .models import *
 
 
 class UsersAdmin(admin.ModelAdmin):
@@ -819,7 +822,198 @@ class ManagementLinksAdmin(admin.ModelAdmin):
     stat.short_description = 'Стата'
 
 
+class AnalyticsSummaryAdmin(admin.ModelAdmin):
+    # Отключаем возможность добавления новых записей
+    def has_add_permission(self, request):
+        return False
 
+    # Отключаем возможность изменения существующих записей
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    # Убираем кнопки "Добавить" и "Изменить"
+    def get_actions(self, request):
+        actions = super().get_actions(request)
+        if 'delete_selected' in actions:
+            del actions['delete_selected']
+        return actions
+
+    list_display = [
+        'date', 
+        'total_user_stats', 
+        'total_shop_stats', 
+        'total_quest_stats', 
+        'total_game_stats', 
+    ]
+    list_filter = ['date']
+    readonly_fields = ['created_at', 'updated_at']
+    date_hierarchy = 'date'
+    
+    def total_shop_stats(self, obj):
+        summary = AnalyticsSummary.objects.get(date=obj.date)
+        shop_stats = ShopStats.objects.filter(summary=summary)
+        
+        sold = 0
+        revenue = 0.0
+        unique_buyers = []
+        for shop_stat in shop_stats:
+            sold += shop_stat.items_sold
+            revenue += shop_stat.total_revenue
+            unique_buyers.extend(shop_stat.unique_buyers)
+        
+        return "{}★ / {}шт / {}users".format(
+            revenue,
+            sold,
+            len(set(unique_buyers))
+        )
+    total_shop_stats.short_description = 'Сводка по покупкам'
+
+    def total_quest_stats(self, obj):
+        summary = AnalyticsSummary.objects.get(date=obj.date)
+        quest_stats = QuestStats.objects.filter(summary=summary)
+        
+        total_rewards = 0.0
+        attempts = 0
+        success = 0
+        failed = 0
+        unique_users = []
+        for quest_stat in quest_stats:
+            total_rewards += quest_stat.total_rewards
+            attempts += quest_stat.attempts
+            success += quest_stat.success
+            failed += quest_stat.failed
+            unique_users.extend(quest_stat.unique_users)
+        
+        return "{}★ / {}att / {}t / {}f / {}wait / {}users".format(
+            total_rewards,
+            attempts,
+            success,
+            failed,
+            attempts - (success + failed),
+            len(set(unique_users))
+        )
+    total_quest_stats.short_description = 'Сводка по квестам'
+
+    def total_game_stats(self, obj):
+        summary = AnalyticsSummary.objects.get(date=obj.date)
+        quest_stats = GamesStats.objects.filter(summary=summary)
+        
+        lumberjack_profit = 0.0
+        geohunter_profit = 0.0
+        lumberjack_clicks = 0
+        geohunter_true = 0
+        geohunter_false = 0
+        lumberjack_unique_users = []
+        geohunter_unique_users = []
+        for quest_stat in quest_stats:
+            lumberjack_profit += quest_stat.lumberjack_profit
+            geohunter_profit += quest_stat.geohunter_profit
+            lumberjack_clicks += quest_stat.lumberjack_clicks
+            geohunter_true += quest_stat.geohunter_true
+            geohunter_false += quest_stat.geohunter_false
+            if quest_stat.lumberjack_unique_users:
+                lumberjack_unique_users.extend(
+                    quest_stat.lumberjack_unique_users
+                    )
+            if quest_stat.geohunter_unique_users:
+                geohunter_unique_users.extend(
+                    quest_stat.geohunter_unique_users
+                    )
+                
+        try:
+            geohunt_stat = int(geohunter_true * 100 / (geohunter_true + geohunter_false))
+        except ZeroDivisionError:
+            geohunt_stat = 0
+        
+        return "{} + {} = {}★ / {} + {}({}%) = {}clicks  / {} + {} = {}users".format(
+            round(lumberjack_profit,2),
+            round(geohunter_profit,2),
+            round((lumberjack_profit + geohunter_profit),2),
+            lumberjack_clicks,
+            geohunter_true + geohunter_false,
+            geohunt_stat,
+            geohunter_true + geohunter_false + lumberjack_clicks,
+            len(set(lumberjack_unique_users)),
+            len(set(geohunter_unique_users)),
+            len(set(lumberjack_unique_users + geohunter_unique_users))
+        )
+    total_game_stats.short_description = 'Сводка по играм (l + g = all)'
+
+    def total_user_stats(self, obj):
+        message_users = MessageAction.objects.filter(
+            summary=obj
+        ).values_list('user_id', flat=True).distinct()
+        
+        callback_users = CallbackAction.objects.filter(
+            summary=obj
+        ).values_list('user_id', flat=True).distinct()
+        
+        all_users = len(set(list(message_users) + list(callback_users)))
+        
+        return f"{all_users} users"
+    total_user_stats.short_description = 'Активных пользователей'
+
+
+class UnifiedUserActionAdmin(admin.ModelAdmin):
+    list_display = ('user_id', 'timestamp', 'action_type', 'get_content_preview')
+    list_filter = (
+        'action_type',
+        ('timestamp', admin.DateFieldListFilter),  # Фильтр по дате
+    )
+    search_fields = ('user_id', 'content')
+    ordering = ('-timestamp',)  # Сортировка по времени (новые сверху)
+    date_hierarchy = 'timestamp'  # Навигация по датам
+    list_per_page = 50  # Пагинация
+    
+    # Поля только для чтения
+    readonly_fields = ('user_id', 'timestamp', 'action_type', 'content')
+    
+    # Отключаем добавление и изменение
+    def has_add_permission(self, request):
+        return False
+    
+    def has_change_permission(self, request, obj=None):
+        return False
+    
+    def has_delete_permission(self, request, obj=None):
+        return False
+    
+    # Кастомные методы для отображения
+    def get_content_preview(self, obj):
+        """Сокращенное отображение контента"""
+        if len(obj.content) > 100:
+            return f"{obj.content[:100]}..."
+        return obj.content
+    get_content_preview.short_description = 'Содержание'
+    
+    def get_queryset(self, request):
+        """Оптимизируем запрос"""
+        return super().get_queryset(request).select_related(None)
+    
+    # Кастомные действия
+    actions = ['export_selected']
+    
+    def export_selected(self, request, queryset):
+        """Экспорт выбранных записей"""
+        from django.http import HttpResponse
+        import csv
+        import io
+        
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow(['User ID', 'Timestamp', 'Action Type', 'Content'])
+        
+        for obj in queryset:
+            writer.writerow([obj.user_id, obj.timestamp, obj.action_type, obj.content])
+        
+        response = HttpResponse(output.getvalue(), content_type='text/csv')
+        response['Content-Disposition'] = 'attachment; filename="user_actions.csv"'
+        return response
+    export_selected.short_description = "Экспортировать выбранные записи в CSV"
+
+
+admin.site.register(UnifiedUserAction, UnifiedUserActionAdmin)
+admin.site.register(AnalyticsSummary, AnalyticsSummaryAdmin)
 admin.site.register(Users, UsersAdmin)
 admin.site.register(Family_Ties, Family_TiesAdmin)
 admin.site.register(Pikmi_Shop, Pikmi_ShopAdmin)

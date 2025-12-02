@@ -41,3 +41,6 @@ aioredis
 celery
 pytest
 pytest-asyncio
+pika
+aio-pika
+pika-stubs
