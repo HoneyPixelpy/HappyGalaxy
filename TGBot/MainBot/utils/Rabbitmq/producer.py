@@ -29,7 +29,6 @@ class RabbitMQProducer:
                         routing_key=topic,
                         body=json.dumps(backup_data, ensure_ascii=False)
                     )
-                    logger.info("✅ Backup message sent to RabbitMQ")
             
         except Exception as e:
             logger.exception(f"❌ Failed to send to RabbitMQ: {e}")
@@ -73,7 +72,6 @@ class RabbitMQProducer:
         else:
             logger.warning(event.event_type)
         
-        logger.success(event_data)
         self.produce_action(
             RabbitMQConfig.TOPICS.USER_ACTIONS,
             event_data

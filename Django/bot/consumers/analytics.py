@@ -191,8 +191,6 @@ class RabbitMQAnalyticsConsumer(RabbitMQAnalyticsBD):
         self.channel = None
         self.running = False
         self.queues = ['game-actions', 'user-actions', 'shop-actions', 'quest-actions']
-        # self.queues = RabbitMQConfig.TOPICS.__dict__.values()
-        logger.debug(f"📤 Queues: {self.queues}")
         
     def connect(self):
         """Установка соединения с RabbitMQ"""
@@ -213,7 +211,6 @@ class RabbitMQAnalyticsConsumer(RabbitMQAnalyticsBD):
             # Настраиваем QoS для контроля количества неподтвержденных сообщений
             self.channel.basic_qos(prefetch_count=1)
             
-            logger.info("✅ Connected to RabbitMQ successfully")
             return True
             
         except AMQPConnectionError as e:
@@ -258,8 +255,6 @@ class RabbitMQAnalyticsConsumer(RabbitMQAnalyticsBD):
         try:
             event_data = json.loads(body.decode('utf-8'))
             queue_name = method.routing_key
-            logger.debug(event_data)
-            logger.debug(queue_name)
             
             success = self.process_event_with_ack(
                 channel, 
@@ -267,12 +262,11 @@ class RabbitMQAnalyticsConsumer(RabbitMQAnalyticsBD):
                 queue_name, 
                 event_data
             )
-            logger.debug(success)
             
-            if success:
-                logger.debug(f"✅ Processed message from {queue_name}: {event_data.get('event_type')}")
-            else:
-                logger.error(f"❌ Failed to process message from {queue_name}")
+            # if success:
+            #     logger.debug(f"✅ Processed message from {queue_name}: {event_data.get('event_type')}")
+            # else:
+            #     logger.error(f"❌ Failed to process message from {queue_name}")
                 
         except json.JSONDecodeError as e:
             logger.error(f"❌ JSON decode error: {e}")
@@ -308,7 +302,7 @@ class RabbitMQAnalyticsConsumer(RabbitMQAnalyticsBD):
 
     def process_event(self, queue_name, summary, event_data):
         """Обработка различных типов событий"""
-        logger.debug(f"Processing event from {queue_name}: {event_data}")
+        # logger.debug(f"Processing event from {queue_name}: {event_data}")
         
         try:
             if queue_name == 'shop-actions':

@@ -98,7 +98,8 @@ class UserDataSession(BaseMiddleware):
             pass
         
         if (
-            not await self.check_authorisation(user, state_now) and 
+            not await self.check_registration_mode(state_now) and 
+            not user.authorised and
             (message.text and "/work" not in message.text) and
             message.chat.type == "private" and
             event.event_type != 'callback_query'# and
@@ -164,21 +165,6 @@ class UserDataSession(BaseMiddleware):
             user_data,
             result_referral
         )
-
-    async def check_authorisation(
-        self,
-        user: Users,
-        state_now: Optional[str]
-        ) -> bool:
-        if (
-            state_now and 
-            (
-                "Auth_state" in state_now or 
-                "RegPersonal" in state_now or
-                "RegPersonal_state" in state_now
-            )
-            ): return True
-        return user.authorised
 
     async def check_registration_mode(
         self,

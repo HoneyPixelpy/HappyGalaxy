@@ -26,7 +26,7 @@ app = Celery(
     timezone='Europe/Moscow'
 )
 
-DEBUG = os.getenv('DEBUG')
+DEBUG = False
 
 # NOTE celery -A main worker -Q copy_base,continue_registration,quest_attempts,aggregation-pipeline -l info
 # NOTE celery -A main beat -l info

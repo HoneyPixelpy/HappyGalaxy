@@ -12,7 +12,6 @@ class AggregateArchive:
         """Ежедневный пайплайн агрегации"""
         try:
             aggregation_date = timezone.now().date() - timedelta(days=7)
-            logger.debug(aggregation_date)
             
             return AdvancedStatsAggregator().aggregate_stats(aggregation_date)
             

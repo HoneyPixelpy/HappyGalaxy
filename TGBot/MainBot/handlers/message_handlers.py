@@ -46,5 +46,5 @@ async def text_over(message: types.Message, state: FSMContext, user: Users):
         await Quests().viue_all(user, message=message)
     elif message.text == texts.Btns.promocodes:
         await Promocodes().wait_promo(user, state, message=message)
-    await message.delete()
+    # await message.delete()
 

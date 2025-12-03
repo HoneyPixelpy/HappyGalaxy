@@ -6,6 +6,7 @@ import subprocess
 from typing import List, Dict, Tuple, Any
 from collections import Counter, defaultdict
 
+import pytz
 from rest_framework.response import Response
 from rest_framework import status
 from django.http import HttpResponse
@@ -263,8 +264,7 @@ class ClearData:
 class BackupData:
     
     def create_backup(
-        self, 
-        summary_date: List[str]
+        self
         ) -> Response:
         """
         Создает дамп базы данных PostgreSQL через Python с правильной обработкой массивов
@@ -280,7 +280,7 @@ class BackupData:
         filename = f"postgres_backup_{formatted_time}.sql"
 
         # Создаем дамп средствами Python
-        dump_content = self._subprocess_pg_dump(db_host, db_port, db_user, db_password, db_name, summary_date)
+        dump_content = self._subprocess_pg_dump(db_host, db_port, db_user, db_password, db_name)
         
         response = HttpResponse(
             dump_content,
@@ -296,8 +296,7 @@ class BackupData:
         db_port: int, 
         db_user: str, 
         db_password: str, 
-        db_name: str, 
-        summary_date: List[str]
+        db_name: str
         ) -> bytes:
         """
         Создание дампа средствами Python через psycopg2
@@ -327,19 +326,8 @@ class BackupData:
                 text=True,
                 check=True
             )
-            
-            filtered_lines = []
-            
-            for line in result.stdout.split('\n'):
-                if (
-                    line.startswith('INSERT') and 
-                    not any(date in line for date in summary_date)
-                    ):
-                    continue
                         
-                filtered_lines.append(line)
-            
-            return '\n'.join(filtered_lines).encode('utf-8')
+            return result.stdout.encode('utf-8')
             
         except subprocess.CalledProcessError as e:
             logger.error(f"pg_dump failed: {e.stderr}")
@@ -393,13 +381,14 @@ class AdvancedStatsAggregator(AggregationData, BackupData, ClearData):
         """
         Процесс агрегации данных
         """
-        if os.getenv('DEBUG'):
-            cutoff_date = timezone.now().date() + timedelta(days=1)
-            
+        # if os.getenv('DEBUG'):
+        #     cutoff_date = (datetime.now(pytz.utc) + timedelta(days=1) + timedelta(hours=1)).date()
+        
         logger.debug(f"📊 Вычисляем статистику до {cutoff_date}")
         
         # 1. Получаем AnalyticsSummary за последние 7 дней так как к ней крепется вся стата за каждый день
         old_summaries = self.get_old_summaries(cutoff_date)
+        logger.debug(f"📊 Статистика за последние 7 дней: {old_summaries}")
         if not old_summaries:
             return Response(
                 data={
@@ -425,9 +414,7 @@ class AdvancedStatsAggregator(AggregationData, BackupData, ClearData):
         super().process_data(aggregat_data)
         
         # 4. Создаем резервную копию того что агрегировали
-        response_backup = super().create_backup(
-            [s.date.strftime('%Y-%m-%d') for s in old_summaries]
-            )
+        response_backup = super().create_backup()
         
         # 5. Удаляем старые данные
         super().delete_work_data(summary_id)
