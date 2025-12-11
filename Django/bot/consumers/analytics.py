@@ -1,12 +1,14 @@
 # Django/bot/consumers/kafka_analytics_consumer.py
 import json
 from datetime import datetime
+import time
 from typing import Dict
 
 from django.db import transaction
 from loguru import logger
-from pika.exceptions import AMQPConnectionError, AMQPChannelError
+from pika.exceptions import AMQPConnectionError, ConnectionClosedByBroker, AMQPChannelError
 from pika import BlockingConnection
+from pika.adapters.blocking_connection import BlockingChannel
 
 from .config import RabbitMQConfig
 from bot.models import *
@@ -187,74 +189,154 @@ class RabbitMQAnalyticsBD:
 class RabbitMQAnalyticsConsumer(RabbitMQAnalyticsBD):
     def __init__(self):
         self.connection_params = RabbitMQConfig.connection_params
-        self.connection = None
-        self.channel = None
+        self.connection: Optional[BlockingConnection] = None
+        self.channel: Optional[BlockingChannel] = None
         self.running = False
         self.queues = ['game-actions', 'user-actions', 'shop-actions', 'quest-actions']
-        
-    def connect(self):
-        """Установка соединения с RabbitMQ"""
-        try:
-            self.connection = BlockingConnection(self.connection_params)
-            self.channel = self.connection.channel()
-            
-            for queue in self.queues:
-                self.channel.queue_declare(
-                    queue=queue, 
-                    durable=True,
-                    arguments={
-                        'x-message-ttl': 604800000,
-                        'x-max-length': 100000
-                    }
-                )
+        self.reconnect_delay = 5  # секунды между попытками переподключения
+        self.max_reconnect_attempts = 10
                 
-            # Настраиваем QoS для контроля количества неподтвержденных сообщений
-            self.channel.basic_qos(prefetch_count=1)
-            
-            return True
-            
-        except AMQPConnectionError as e:
-            logger.error(f"❌ Failed to connect to RabbitMQ: {e}")
-            return False
-
+    def connect(self) -> bool:
+        """Установка соединения с RabbitMQ с обработкой ошибок."""
+        attempt = 0
+        
+        while attempt < self.max_reconnect_attempts and self.running:
+            try:
+                logger.info(f"🔗 Connecting to RabbitMQ (attempt {attempt + 1}/{self.max_reconnect_attempts})...")
+                
+                self.connection = BlockingConnection(self.connection_params)
+                self.channel = self.connection.channel()
+                
+                # Настройка QoS
+                self.channel.basic_qos(prefetch_count=10)  # Увеличьте для параллелизма
+                
+                # Объявление очередей с оптимизированными настройками
+                for queue in self.queues:
+                    self.channel.queue_declare(
+                        queue=queue,
+                        durable=True,
+                        arguments={
+                            'x-message-ttl': 604800000,  # 7 дней
+                            'x-max-length': 50000,  # Уменьшите лимит
+                            'x-overflow': 'drop-head'  # Удалять старые сообщения при переполнении
+                        }
+                    )
+                
+                # Включение подтверждения публикации
+                self.channel.confirm_delivery()
+                
+                logger.info("✅ Successfully connected to RabbitMQ")
+                return True
+                
+            except (AMQPConnectionError, ConnectionClosedByBroker) as e:
+                attempt += 1
+                logger.warning(f"⚠️ Connection failed: {e}")
+                
+                if attempt < self.max_reconnect_attempts:
+                    logger.info(f"🔄 Retrying in {self.reconnect_delay} seconds...")
+                    time.sleep(self.reconnect_delay)
+                else:
+                    logger.error(f"❌ Max reconnection attempts reached")
+                    return False
+                    
+            except Exception as e:
+                logger.error(f"❌ Unexpected connection error: {e}")
+                return False
+        
+        return False
+    
+    def ensure_connection(self) -> bool:
+        """Проверка и восстановление соединения."""
+        if self.connection is None or self.connection.is_closed:
+            logger.warning("⚠️ Connection lost, reconnecting...")
+            return self.connect()
+        
+        if self.channel is None or self.channel.is_closed:
+            try:
+                self.channel = self.connection.channel()
+                self.channel.basic_qos(prefetch_count=10)
+                return True
+            except Exception as e:
+                logger.error(f"❌ Failed to recreate channel: {e}")
+                return False
+        
+        return True
+    
     def start_consuming(self) -> None:
         """
-        Основной цикл потребления сообщений
+        Основной цикл потребления сообщений с обработкой переподключений.
         """
         self.running = True
         
-        if not self.connect():
-            logger.error("❌ Failed to establish RabbitMQ connection")
-            return
-        
-        logger.info("🚀 Starting RabbitMQ analytics consumer...")
-        
-        # Настраиваем потребителей для каждой очереди
-        for queue in self.queues:
-            self.channel.basic_consume(
-                queue=queue,
-                on_message_callback=self._on_message_callback,
-                auto_ack=False  # Ручное подтверждение
-            )
-        
-        try:
-            logger.info(f"📥 Listening on queues: {self.queues}")
-            self.channel.start_consuming()
+        while self.running:
+            if not self.ensure_connection():
+                logger.error("❌ Failed to establish connection, retrying...")
+                time.sleep(self.reconnect_delay)
+                continue
             
-        except KeyboardInterrupt:
-            logger.info("🛑 Consumer stopped by user")
-        except Exception as e:
-            logger.error(f"❌ Consumer error: {e}")
-        finally:
-            self.close_connection()
-
+            try:
+                logger.info("🚀 Starting RabbitMQ analytics consumer...")
+                
+                # Настраиваем потребителей для каждой очереди
+                for queue in self.queues:
+                    self.channel.basic_consume(
+                        queue=queue,
+                        on_message_callback=self._on_message_callback_wrapper,
+                        auto_ack=False
+                    )
+                
+                logger.info(f"📥 Listening on queues: {self.queues}")
+                
+                # Неблокирующий цикл с таймаутом
+                while self.running and self.connection and self.connection.is_open:
+                    try:
+                        self.connection.process_data_events(time_limit=1)  # Таймаут 1 секунда
+                    except (AMQPConnectionError, AMQPChannelError) as e:
+                        logger.warning(f"⚠️ Connection error in process loop: {e}")
+                        break
+                    except Exception as e:
+                        logger.error(f"❌ Unexpected error in process loop: {e}")
+                        time.sleep(1)  # Защита от busy loop
+                
+                if self.running:
+                    logger.warning("⚠️ Connection lost, reconnecting...")
+                    
+            except KeyboardInterrupt:
+                logger.info("🛑 Consumer stopped by user")
+                break
+            except Exception as e:
+                logger.error(f"❌ Consumer error: {e}")
+                time.sleep(self.reconnect_delay)
+        
+        self.close_connection()
+    
+    def _on_message_callback_wrapper(self, channel, method, properties, body):
+        """
+        Обертка для callback с обработкой ошибок соединения.
+        """
+        try:
+            self._on_message_callback(channel, method, properties, body)
+        except (AMQPConnectionError, AMQPChannelError) as e:
+            logger.error(f"❌ Channel error in callback: {e}")
+            raise  # Перебрасываем для обработки в основном цикле
+    
     def _on_message_callback(self, channel, method, properties, body):
         """
-        Callback для обработки входящих сообщений
+        Callback для обработки входящих сообщений.
         """
+        start_time = time.time()
+        
         try:
+            # Проверяем соединение перед обработкой
+            if not self.ensure_connection():
+                logger.error("❌ Cannot process message - no connection")
+                channel.basic_nack(delivery_tag=method.delivery_tag, requeue=True)
+                return
+            
             event_data = json.loads(body.decode('utf-8'))
             queue_name = method.routing_key
+            
+            logger.debug(f"📨 Received message from {queue_name}: {event_data.get('event_type', 'unknown')}")
             
             success = self.process_event_with_ack(
                 channel, 
@@ -263,31 +345,49 @@ class RabbitMQAnalyticsConsumer(RabbitMQAnalyticsBD):
                 event_data
             )
             
-            # if success:
-            #     logger.debug(f"✅ Processed message from {queue_name}: {event_data.get('event_type')}")
-            # else:
-            #     logger.error(f"❌ Failed to process message from {queue_name}")
+            processing_time = time.time() - start_time
+            
+            if success:
+                logger.debug(f"✅ Processed {queue_name} in {processing_time:.2f}s")
+            else:
+                logger.warning(f"⚠️ Failed to process {queue_name} after {processing_time:.2f}s")
                 
         except json.JSONDecodeError as e:
             logger.error(f"❌ JSON decode error: {e}")
+            # Некорректное сообщение - не ставить обратно в очередь
             channel.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
         except Exception as e:
             logger.error(f"❌ Unexpected error in callback: {e}")
+            # Временная ошибка - поставить обратно в очередь
             channel.basic_nack(delivery_tag=method.delivery_tag, requeue=True)
-
-    def process_event_with_ack(self, channel, method, queue_name, event_data):
+    
+    def process_event_with_ack(self, channel, method, queue_name, event_data) -> bool:
         """
-        Обработка события с транзакцией и ручным подтверждением
+        Обработка события с транзакцией и ручным подтверждением.
         """
         try:
+            # Лимит времени на обработку
+            processing_start = time.time()
+            max_processing_time = 30  # секунд
+            
             with transaction.atomic():
                 today = datetime.now().date()
                 summary = super().get_analytics_summary(today)
                 success = self.process_event(queue_name, summary, event_data)
                 
+                processing_time = time.time() - processing_start
+                
+                if processing_time > max_processing_time:
+                    logger.warning(f"⚠️ Slow processing: {processing_time:.2f}s for {queue_name}")
+                
                 if success:
                     # Подтверждаем только после успешной записи в БД
                     channel.basic_ack(delivery_tag=method.delivery_tag)
+                    
+                    # Периодически фиксируем соединение
+                    if random.random() < 0.01:  # 1% chance
+                        self.connection.process_data_events()
+                    
                     return True
                 else:
                     # Отклоняем без повторной постановки в очередь
@@ -296,47 +396,81 @@ class RabbitMQAnalyticsConsumer(RabbitMQAnalyticsBD):
                     
         except Exception as e:
             logger.error(f"❌ Transaction failed: {e}")
-            # Отклоняем с повторной постановкой в очередь для временных ошибок
+            # Временная ошибка БД - ставим обратно в очередь
             channel.basic_nack(delivery_tag=method.delivery_tag, requeue=True)
+            
+            # Задержка перед следующей попыткой
+            time.sleep(1)
+            
             return False
-
-    def process_event(self, queue_name, summary, event_data):
-        """Обработка различных типов событий"""
-        # logger.debug(f"Processing event from {queue_name}: {event_data}")
-        
+    
+    def process_event(self, queue_name, summary, event_data) -> bool:
+        """Обработка различных типов событий с таймаутом."""
         try:
-            if queue_name == 'shop-actions':
-                return super().process_shop_purchase(summary, event_data)
-            elif queue_name == 'quest-actions':
-                return super().process_quest_action(summary, event_data)
-            elif queue_name == 'game-actions':
-                return super().process_game_action(summary, event_data)
-            elif queue_name == 'user-actions':
-                return super().process_user_action(summary, event_data)
-            else:
-                logger.warning(f"Unknown queue: {queue_name}")
-                return True  # Подтверждаем неизвестные очереди
+            # Ограничение времени обработки
+            import signal
+            
+            class TimeoutException(Exception):
+                pass
+            
+            def timeout_handler(signum, frame):
+                raise TimeoutException("Processing timeout")
+            
+            # Устанавливаем таймаут (только для Unix-систем)
+            try:
+                signal.signal(signal.SIGALRM, timeout_handler)
+                signal.alarm(25)  # 25 секунд
+                
+                if queue_name == 'shop-actions':
+                    result = super().process_shop_purchase(summary, event_data)
+                elif queue_name == 'quest-actions':
+                    result = super().process_quest_action(summary, event_data)
+                elif queue_name == 'game-actions':
+                    result = super().process_game_action(summary, event_data)
+                elif queue_name == 'user-actions':
+                    result = super().process_user_action(summary, event_data)
+                else:
+                    logger.warning(f"Unknown queue: {queue_name}")
+                    result = True  # Подтверждаем неизвестные очереди
+                
+                signal.alarm(0)  # Сбрасываем таймер
+                return result
+                
+            except TimeoutException:
+                logger.error(f"⏰ Processing timeout for {queue_name}")
+                return False
                 
         except Exception as e:
             logger.error(f"Error processing {queue_name}: {e}")
             return False
-
+    
     def close_connection(self):
-        """Закрытие соединения с RabbitMQ"""
+        """Закрытие соединения с RabbitMQ."""
         try:
             if self.channel and self.channel.is_open:
                 self.channel.close()
+        except Exception as e:
+            logger.debug(f"Error closing channel: {e}")
+        
+        try:
             if self.connection and self.connection.is_open:
                 self.connection.close()
-            logger.info("🔌 RabbitMQ connection closed")
         except Exception as e:
-            logger.error(f"Error closing RabbitMQ connection: {e}")
-
+            logger.debug(f"Error closing connection: {e}")
+        
+        self.connection = None
+        self.channel = None
+        logger.info("🔌 RabbitMQ connection closed")
+    
     def stop_consuming(self):
-        """Остановка потребителя"""
+        """Остановка потребителя."""
+        logger.info("🛑 Stopping consumer...")
         self.running = False
+        
         if self.channel and self.channel.is_open:
-            self.channel.stop_consuming()
+            try:
+                self.channel.stop_consuming()
+            except Exception as e:
+                logger.debug(f"Error stopping consumption: {e}")
+        
         self.close_connection()
-
-
