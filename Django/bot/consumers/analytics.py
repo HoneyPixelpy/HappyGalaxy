@@ -6,7 +6,7 @@ from typing import Dict
 
 from django.db import transaction
 from loguru import logger
-from pika.exceptions import AMQPConnectionError, ConnectionClosedByBroker, AMQPChannelError
+from pika.exceptions import AMQPConnectionError, ConnectionClosedByBroker, AMQPChannelError, ChannelClosedByBroker
 from pika import BlockingConnection
 from pika.adapters.blocking_connection import BlockingChannel
 
@@ -197,7 +197,7 @@ class RabbitMQAnalyticsConsumer(RabbitMQAnalyticsBD):
         self.max_reconnect_attempts = 10
                 
     def connect(self) -> bool:
-        """Установка соединения с RabbitMQ с обработкой ошибок."""
+        """Установка соединения с RabbitMQ с очисткой очередей."""
         attempt = 0
         
         while attempt < self.max_reconnect_attempts and self.running:
@@ -208,22 +208,30 @@ class RabbitMQAnalyticsConsumer(RabbitMQAnalyticsBD):
                 self.channel = self.connection.channel()
                 
                 # Настройка QoS
-                self.channel.basic_qos(prefetch_count=10)  # Увеличьте для параллелизма
+                self.channel.basic_qos(prefetch_count=1)
                 
-                # Объявление очередей с оптимизированными настройками
+                # ⚠️ Сначала удаляем очереди если нужно
+                for queue in self.queues:
+                    try:
+                        self.channel.queue_delete(queue=queue)
+                        logger.info(f"🗑️ Deleted queue: {queue}")
+                    except ChannelClosedByBroker:
+                        # Очередь не существует - это нормально
+                        pass
+                    except Exception as e:
+                        logger.debug(f"Could not delete queue {queue}: {e}")
+                
+                # Создаем очереди с новыми параметрами
                 for queue in self.queues:
                     self.channel.queue_declare(
                         queue=queue,
                         durable=True,
                         arguments={
-                            'x-message-ttl': 604800000,  # 7 дней
-                            'x-max-length': 50000,  # Уменьшите лимит
-                            'x-overflow': 'drop-head'  # Удалять старые сообщения при переполнении
+                            'x-message-ttl': 604800000,
+                            'x-max-length': 10000,
+                            'x-overflow': 'drop-head'
                         }
                     )
-                
-                # Включение подтверждения публикации
-                self.channel.confirm_delivery()
                 
                 logger.info("✅ Successfully connected to RabbitMQ")
                 return True
