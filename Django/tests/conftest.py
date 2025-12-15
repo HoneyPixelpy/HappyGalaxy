@@ -35,12 +35,12 @@ pytest_plugins = [
     'plugins.django_settings'
 ]
 
-
-"""
-
 # Настройка Django
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'conf.settings')
 django.setup()
+
+"""
+
 
 @pytest.fixture
 def fake_user_data():

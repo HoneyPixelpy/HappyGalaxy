@@ -15,14 +15,7 @@ class RabbitMQProducer:
         try:
             with pika.BlockingConnection(RabbitMQConfig.connection_params) as connection:
                 with connection.channel() as channel:
-                    # channel.queue_declare(
-                    #     queue=topic, 
-                    #     durable=True,
-                    #     arguments={
-                    #         'x-message-ttl': 604800000,
-                    #         'x-max-length': 100000
-                    #     }
-                    # ) 
+                    # NOTE channel.queue_declare -> очередя создаются consumer (другим сервисом)
                     
                     channel.basic_publish(
                         exchange='',

@@ -162,11 +162,12 @@ STATIC_URL = '/staticfiles/'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-logger.add(
-    sink=f'{BASE_DIR}/logs/debug.log',
-    format="| TIME:{time:HH:mm:ss} | LVL:{level} | FILE:{file} | LINE:{line} | FUNC:{function} |\n:::{message}",
-    level="DEBUG",
-    rotation="1000 KB"
-)
+if not os.getenv('TEST'):
+    logger.add(
+        sink=f'{BASE_DIR}/logs/debug.log',
+        format="| TIME:{time:HH:mm:ss} | LVL:{level} | FILE:{file} | LINE:{line} | FUNC:{function} |\n:::{message}",
+        level="DEBUG",
+        rotation="1000 KB"
+    )
 
 

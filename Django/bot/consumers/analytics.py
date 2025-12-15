@@ -227,9 +227,10 @@ class RabbitMQAnalyticsConsumer(RabbitMQAnalyticsBD):
                         queue=queue,
                         durable=True,
                         arguments={
-                            'x-message-ttl': 604800000,
-                            'x-max-length': 10000,
-                            'x-overflow': 'drop-head'
+                            'x-message-ttl': 86_400_000,
+                            'x-max-length': 1000,
+                            'x-overflow': 'drop-head',
+                            'x-queue-mode': 'lazy',
                         }
                     )
                 
