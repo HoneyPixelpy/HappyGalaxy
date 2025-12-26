@@ -1,11 +1,10 @@
 import datetime
 
-from loguru import logger
-
-from rabbitmq import RabbitMQForms
+from api.Django.forms import (AggregatorMethods, CopyBaseMethods,
+                              QuestModerationAttemptMethods, UserMethods)
 from api.MainBot import MainBotForms
-from api.Django.forms import AggregatorMethods, UserMethods, CopyBaseMethods, QuestModerationAttemptMethods
-
+from loguru import logger
+from rabbitmq import RabbitMQForms
 
 
 def sync_copy_bd(

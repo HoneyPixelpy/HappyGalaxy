@@ -1,15 +1,14 @@
 import asyncio
-from typing import List
 from datetime import datetime, timedelta
-import aiohttp
+from typing import List
 
+import aiohttp
 from loguru import logger
+from MainBot.base.models import Users
+from MainBot.base.orm_requests import QuestsMethods, UseQuestsMethods, UserMethods
+from MainBot.utils.MyModule import Func
 
 from ..api import VKGroup
-from MainBot.base.models import Users
-from MainBot.utils.MyModule import Func
-from MainBot.base.orm_requests import QuestsMethods, UseQuestsMethods, UserMethods
-
 
 
 class VkSubscriptionChecker:
@@ -24,7 +23,7 @@ class VkSubscriptionChecker:
         """Запускает фоновую задачу"""
         if self._running:
             return
-            
+
         self._running = True
         self._session = aiohttp.ClientSession()
         self._task = asyncio.create_task(self._run_daily_check())
@@ -53,8 +52,10 @@ class VkSubscriptionChecker:
 
             # Сколько осталось до следующей проверки?
             sleep_seconds = (target_time - now).total_seconds()
-            
-            logger.info(f"Следующая проверка полписки ВК чатов в {target_time} (через {sleep_seconds / 3600:.1f} часов)")
+
+            logger.info(
+                f"Следующая проверка полписки ВК чатов в {target_time} (через {sleep_seconds / 3600:.1f} часов)"
+            )
             await asyncio.sleep(sleep_seconds)  # Спим до 3:00 ночи
 
             # Запускаем проверку
@@ -63,24 +64,31 @@ class VkSubscriptionChecker:
     async def _check_all_subscribers(self):
         """Получает и проверяет всех подписчиков"""
         try:
-            """ TODO
+            """TODO
             когда научимся добавлять интерактивно, нужно сделать так чтобы мы сначала получали
             все квесты для vk и с каждым квестом проводили эту работу
             """
-            quests = [quest for quest in await QuestsMethods().get_quests() if quest.quest_data.type == "vk"]
+            quests = [
+                quest
+                for quest in await QuestsMethods().get_quests()
+                if quest.quest_data.type == "vk"
+            ]
             for quest in quests:
                 members: set[int] = await VKGroup.get_group_members(
-                    quest.quest_data.chat_id_name, 
-                    quest.quest_data.group_token
-                    )
-                vk_users: List[Users] = await UseQuestsMethods().get_all_users_sub_vk_chat(quest.id)
-                
+                    quest.quest_data.chat_id_name, quest.quest_data.group_token
+                )
+                vk_users: List[Users] = (
+                    await UseQuestsMethods().get_all_users_sub_vk_chat(quest.id)
+                )
+
                 for vk_user in vk_users:
                     if vk_user.vk_id not in members:
-                        await self._handle_unsubscribed(vk_user, quest.quest_data.chat_id_name)
-                    
+                        await self._handle_unsubscribed(
+                            vk_user, quest.quest_data.chat_id_name
+                        )
+
                     await asyncio.sleep(self._request_delay)
-                
+
         except Exception as e:
             logger.error(f"Ошибка при проверке подписчиков: {e}")
             await Func.send_error_to_developer(

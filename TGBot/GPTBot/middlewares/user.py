@@ -1,14 +1,13 @@
-from typing import Any, Dict, Callable, Awaitable, Optional
+from typing import Any, Awaitable, Callable, Dict, Optional
 
-from aiogram import BaseMiddleware
-from aiogram.types import TelegramObject, Message
-from loguru import logger
-
-from GPTBot.utils import check_tg_invite
 import texts
-from MainBot.utils.errors import InternalServerError
+from aiogram import BaseMiddleware
+from aiogram.types import Message, TelegramObject
+from GPTBot.utils import check_tg_invite
+from loguru import logger
 from MainBot.base.models import Users
 from MainBot.base.orm_requests import UserMethods
+from MainBot.utils.errors import InternalServerError
 
 
 class UserDataSession(BaseMiddleware):
@@ -18,11 +17,13 @@ class UserDataSession(BaseMiddleware):
         handler: Callable[[TelegramObject, Dict[str, Any]], Awaitable[Any]],
         event: TelegramObject,
         data: Dict[str, Any],
-        ) -> Any:
-        try:    print(event.event.chat.id)
-        except: pass
+    ) -> Any:
+        try:
+            print(event.event.chat.id)
+        except:
+            pass
 
-        if event.event_type == 'callback_query':
+        if event.event_type == "callback_query":
             message: Message = event.callback_query.message
             from_user = event.callback_query.from_user
         else:
@@ -32,14 +33,11 @@ class UserDataSession(BaseMiddleware):
         try:
             user = await self.check_registration(from_user.id)
         except InternalServerError:
-            await message.bot.send_message(
-                from_user.id,
-                texts.Error.Notif.server_error
-            )
+            await message.bot.send_message(from_user.id, texts.Error.Notif.server_error)
             return
-        
+
         logger.debug(user)
-        
+
         if not user or not user.authorised or not await check_tg_invite(user.user_id):
             await message.bot.send_message(
                 chat_id=message.from_user.id,
@@ -56,22 +54,15 @@ class UserDataSession(BaseMiddleware):
                     "После выполненных действий нажмите или напишите /start\n"
                     "</b>"
                 ),
-                disable_web_page_preview=True
+                disable_web_page_preview=True,
             )
             return
-        
-        if user.ban: return        
 
-        data['user'] = user
+        if user.ban:
+            return
+
+        data["user"] = user
         return await handler(event, data)
 
-    async def check_registration(
-        self,
-        user_id: int
-        ) -> Optional[Users]:
-        return await UserMethods().get_by_user_id(
-            user_id=user_id
-        )
-        
-
-
+    async def check_registration(self, user_id: int) -> Optional[Users]:
+        return await UserMethods().get_by_user_id(user_id=user_id)

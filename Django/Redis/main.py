@@ -1,11 +1,11 @@
 import os
-from loguru import logger
 
-from redis import Redis
 import redis as redis
-
+from loguru import logger
+from redis import Redis
 
 REDIS_URL = os.getenv("REDIS_URL")
+
 
 class RedisManager:
     _instance = None
@@ -20,7 +20,7 @@ class RedisManager:
                 socket_timeout=5,
                 socket_connect_timeout=5,
                 retry_on_timeout=True,
-                max_connections=10
+                max_connections=10,
             )
         return cls._instance
 

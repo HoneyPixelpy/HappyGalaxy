@@ -2,9 +2,9 @@
 import json
 import os
 
-from pika import ConnectionParameters, PlainCredentials, BlockingConnection
-from pika.exceptions import AMQPConnectionError
 from loguru import logger
+from pika import BlockingConnection, ConnectionParameters, PlainCredentials
+from pika.exceptions import AMQPConnectionError
 
 
 class RabbitMQBackupProducer:

@@ -1,7 +1,9 @@
 
 
 from typing import Any, Dict, List
-from .requests import AggregatorRequests, CopyBaseRequests, UserRequests, QuestModerationAttemptRequests
+
+from .requests import (AggregatorRequests, CopyBaseRequests,
+                       QuestModerationAttemptRequests, UserRequests)
 
 
 class CopyBaseMethods:

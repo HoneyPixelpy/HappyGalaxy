@@ -1,14 +1,15 @@
 import asyncio
-import json
 import base64
+import json
+import math
 import os
-from pathlib import Path
 import time
-from loguru import logger
-from aiogram import types, Bot
+from pathlib import Path
 
-from dotenv import load_dotenv
 import pika
+from aiogram import Bot, types
+from dotenv import load_dotenv
+from loguru import logger
 
 BASE_DIR = Path(__file__).resolve().parent
 
@@ -86,35 +87,48 @@ class BackupConsumer:
         
         content = backup_data['content'].encode('utf-8')
         
-        try:
-            logger.info(f"Processing backup task {formatted_time}")
-            
-            # Сохраняем временный файл
-            with open(backup_path, 'wb') as f:
-                f.write(content)
-            
-            # Проверяем что файл создан
-            if not backup_path.exists() or backup_path.stat().st_size == 0:
-                raise ValueError("Backup file is empty or not created")
-            
-            # Отправляем в Telegram
-            await bot.send_document(
-                chat_id=chat_id,
-                document=types.FSInputFile(
-                    path=backup_path, 
-                    filename=filename
-                ),
-                caption=backup_data['caption']
-            )
-            
-            logger.info(f"✅ Backup {formatted_time} sent successfully")
-            
-        except Exception as e:
-            logger.exception(f"❌ Failed to process backup: {e}")
-            raise  # Пробрасываем исключение для обработки на уровне message
-        finally:
-            # Удаляем временный файл
-            await self._delete_temporary_file(backup_path)
+        logger.info(f"Processing backup task {formatted_time}")
+        chunk_size = 45 * 1024 * 1024  # 45MB на часть (с запасом)
+        
+        total_size = len(content)
+        total_parts = math.ceil(total_size / chunk_size)
+
+        for part_num in range(total_parts):
+            try:
+                start = part_num * chunk_size
+                end = min((part_num + 1) * chunk_size, total_size)
+                chunk = content[start:end]
+
+                # Сохраняем часть
+                part_filename = f"{backup_path.stem}_part{part_num+1}_of{total_parts}{backup_path.suffix}"
+                part_path = BASE_DIR / part_filename
+
+                # Сохраняем временный файл
+                with open(part_path, 'wb') as f:
+                    f.write(chunk)
+                
+                # Проверяем что файл создан
+                if not part_path.exists() or part_path.stat().st_size == 0:
+                    raise ValueError("Backup file is empty or not created")
+                
+                # Отправляем в Telegram
+                await bot.send_document(
+                    chat_id=chat_id,
+                    document=types.FSInputFile(
+                        path=part_path, 
+                        filename=filename
+                    ),
+                    caption=backup_data['caption']
+                )
+                
+                logger.info(f"✅ Backup {formatted_time} sent successfully")
+        
+            except Exception as e:
+                logger.exception(f"❌ Failed to process backup: {e}")
+                raise  # Пробрасываем исключение для обработки на уровне message
+            finally:
+                # Удаляем временный файл
+                await self._delete_temporary_file(part_path)
     
     async def _delete_temporary_file(self, backup_path):
         """Удаляем временный файл"""
@@ -126,6 +140,5 @@ class BackupConsumer:
                 logger.warning(f"⚠️ Could not delete temp file: {e}")
 
 if __name__ == "__main__":
-    time.sleep(30)
     consumer = BackupConsumer()
     consumer.start_consuming()

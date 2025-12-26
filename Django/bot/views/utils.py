@@ -2,13 +2,12 @@ import re
 import threading
 from functools import wraps
 from typing import Any, Callable
-from loguru import logger
 
+from loguru import logger
 from rest_framework import status
 from rest_framework.response import Response
 
 from .error import RaisesResponse
-
 
 
 class DatabaseQueue:
@@ -37,9 +36,7 @@ class DatabaseQueue:
             if self._worker_thread is None:
                 self._stop_event.clear()
                 self._worker_thread = threading.Thread(
-                    target=self._worker_loop,
-                    daemon=True,
-                    name="DatabaseQueueWorker"
+                    target=self._worker_loop, daemon=True, name="DatabaseQueueWorker"
                 )
                 self._worker_thread.start()
                 logger.info("DatabaseQueue worker started")
@@ -89,6 +86,7 @@ class DatabaseQueue:
 
 class Future:
     """Потокобезопасная Future с таймаутом"""
+
     def __init__(self, timeout: float = None):
         self._condition = threading.Condition()
         self._result = None
@@ -119,7 +117,7 @@ class Future:
                 self._condition.wait(timeout or self._timeout)
                 if not self._done:
                     raise TimeoutError("Future result timed out")
-            
+
             if self._exception:
                 raise self._exception
             return self._result
@@ -129,69 +127,57 @@ def queue_request(func):
     """
     Декоратор для последовательной обработки запросов к БД
     """
+
     @wraps(func)
     def wrapper(*args, **kwargs):
         """
         Декорируем обработчики запросов для
         отловли частых ошибок
-        
+
         WARNING:
             Для SQLite дополнительно используем очередь
-            для того чтобы с базов в одно время  
+            для того чтобы с базов в одно время
             работал только один поток
         """
         try:
             # NOTE с переходом на PostgreSQL уберем на простое выполнение метода
             return func(*args, **kwargs)
-            return DatabaseQueue().request(
-                func, 
-                *args, 
-                **kwargs
-            )
-        except RaisesResponse as e: # NOTE почти всегда ответ возвращается через эту ошибку
-            return Response(
-                data=e.data, 
-                status=e.status
-            )
+            return DatabaseQueue().request(func, *args, **kwargs)
+        except (
+            RaisesResponse
+        ) as e:  # NOTE почти всегда ответ возвращается через эту ошибку
+            return Response(data=e.data, status=e.status)
         except Exception as e:
-            error = "\n{}: {}\n{}".format(
-                str(func),
-                e.__class__.__name__,
-                str(e)
-            )
+            error = "\n{}: {}\n{}".format(str(func), e.__class__.__name__, str(e))
             logger.exception(error)
             return Response(
-                {'error': error},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                {"error": error}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
     return wrapper
 
 
 class QueryData:
     @classmethod
-    def check_params(
-        cls,
-        request,
-        key: str
-        ) -> Any:
+    def check_params(cls, request, key: str) -> Any:
         value = request.data.get(key, "no key")
         if value == "no key":
             value = request.query_params.get(key, "no key")
             if value == "no key":
-                logger.warning(f'\n{key} parameter is required\n')
+                logger.warning(f"\n{key} parameter is required\n")
                 raise RaisesResponse(
-                    data={'error': f'{key} parameter is required'}, 
-                    status=status.HTTP_400_BAD_REQUEST
+                    data={"error": f"{key} parameter is required"},
+                    status=status.HTTP_400_BAD_REQUEST,
                 )
         return value
 
 
 def check_sql_injection(value: str) -> bool:
-    if not re.match(r'^[a-zA-Zа-яА-Я0-9_-]{3,50}$', value):
+    if not re.match(r"^[a-zA-Zа-яА-Я0-9_-]{3,50}$", value):
         raise RaisesResponse(
             data={
-                'error': 'undefined', # NOTE для выдачи пользователю информации об неопределенной ошибке
-                'message': 'SQL Injection detected'
+                "error": "undefined",  # NOTE для выдачи пользователю информации об неопределенной ошибке
+                "message": "SQL Injection detected",
             },
-            status=status.HTTP_200_OK
+            status=status.HTTP_200_OK,
         )

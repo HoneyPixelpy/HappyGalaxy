@@ -1,9 +1,8 @@
 import os
-from loguru import logger
 
-from redis import Redis
 import redis as redis
-
+from loguru import logger
+from redis import Redis
 
 REDIS_URL = os.getenv("REDIS_URL")
 

@@ -1,11 +1,10 @@
 import os
 from pathlib import Path
 
-from loguru import logger
 from celery import Celery
 from celery.schedules import crontab
-
 from dotenv import load_dotenv
+from loguru import logger
 
 load_dotenv()
 

@@ -1,11 +1,13 @@
 from typing import Union
+
 from pydantic import BaseModel
 
 
 class BoostPydantic(BaseModel):
     max_level: int
-    value_by_level: dict[int,Union[int,float]]
-    price: dict[int,int]
+    value_by_level: dict[int, Union[int, float]]
+    price: dict[int, int]
+
 
 class BoostData:
     def __init__(self, pd: BoostPydantic):
@@ -40,13 +42,13 @@ class BoostData:
             26: "😱",
             27: "😱",
             28: "😱",
-            29: "😱"
+            29: "😱",
         }
 
     def max_level(self) -> int:
         return self.pd.max_level
 
-    def value_by_level(self, level: int) -> Union[int,float]:
+    def value_by_level(self, level: int) -> Union[int, float]:
         try:
             return self.pd.value_by_level[level]
         except KeyError:
@@ -55,13 +57,13 @@ class BoostData:
             else:
                 return self.pd.value_by_level[self.pd.max_level]
 
-    def price(self, level: int) -> Union[int,float,str]:
+    def price(self, level: int) -> Union[int, float, str]:
         """
         Получаем цену для следущего уровня
         относительно нашего текущего уровня (level)
         """
         try:
-            return self.pd.price[level+1]
+            return self.pd.price[level + 1]
         except KeyError:
             return "MAX"
 
@@ -70,6 +72,7 @@ class BoostData:
             return self._emoji[level]
         except KeyError:
             return "💪"
+
 
 class BoostsPydantic(BaseModel):
     income_level: BoostData
@@ -82,10 +85,10 @@ class BoostsPydantic(BaseModel):
 
 
 boosts_data = BoostsPydantic(
-    income_level = BoostData(
+    income_level=BoostData(
         BoostPydantic(
-            max_level = 19,
-            value_by_level = {
+            max_level=19,
+            value_by_level={
                 0: 0.01,
                 1: 0.02,
                 2: 0.03,
@@ -105,9 +108,9 @@ boosts_data = BoostsPydantic(
                 16: 0.17,
                 17: 0.18,
                 18: 0.19,
-                19: 0.2
+                19: 0.2,
             },
-            price = {
+            price={
                 0: 0,
                 1: 5,
                 2: 10,
@@ -127,66 +130,29 @@ boosts_data = BoostsPydantic(
                 16: 1100,
                 17: 1400,
                 18: 1700,
-                19: 2000
-            }
+                19: 2000,
+            },
         )
     ),
-    energy_capacity_level = BoostData(
+    energy_capacity_level=BoostData(
         BoostPydantic(
-            max_level = 7,
-            value_by_level = {
-                0: 30,
-                1: 40,
-                2: 50,
-                3: 60,
-                4: 70,
-                5: 80,
-                6: 90,
-                7: 100
-            },
-            price = {
-                0: 0,
-                1: 10,
-                2: 15,
-                3: 25,
-                4: 40,
-                5: 60,
-                6: 85,
-                7: 120
-            }
+            max_level=7,
+            value_by_level={0: 30, 1: 40, 2: 50, 3: 60, 4: 70, 5: 80, 6: 90, 7: 100},
+            price={0: 0, 1: 10, 2: 15, 3: 25, 4: 40, 5: 60, 6: 85, 7: 120},
         )
     ),
-    recovery_level = BoostData(
+    recovery_level=BoostData(
         BoostPydantic(
-            max_level = 2,
-            value_by_level = {
-                0: 240,
-                1: 210,
-                2: 180
-            },
-            price = {
-                0: 0,
-                1: 50,
-                2: 150
-            }
+            max_level=2,
+            value_by_level={0: 240, 1: 210, 2: 180},
+            price={0: 0, 1: 50, 2: 150},
         )
     ),
-    passive_income_level = BoostData(
+    passive_income_level=BoostData(
         BoostPydantic(
-            max_level = 3,
-            value_by_level = {
-                0: 0,
-                1: 0.2,
-                2: 0.4,
-                3: 0.6
-            },
-            price = {
-                0: 0,
-                1: 60,
-                2: 110,
-                3: 160
-            }
+            max_level=3,
+            value_by_level={0: 0, 1: 0.2, 2: 0.4, 3: 0.6},
+            price={0: 0, 1: 60, 2: 110, 3: 160},
         )
-    )
+    ),
 )
-

@@ -1,7 +1,7 @@
 import json
 from typing import Any, Callable, Dict, List, Optional, Tuple
-from loguru import logger
 
+from loguru import logger
 from Redis.main import RedisManager
 
 

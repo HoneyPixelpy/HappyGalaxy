@@ -12,16 +12,16 @@ from .Shop import Shop
 from .UTMLinks import UTMLinksForm
 
 __all__ = [
-    'Authorisation',
-    'BonusBoosters',
-    'Boosts',
-    'FamilyTies',
-    'GiveLinksForm',
-    'PersonalForms',
-    'Profile',
-    'Promocodes',
-    'Quests',
-    'Season',
-    'Shop',
-    'UTMLinksForm'
+    "Authorisation",
+    "BonusBoosters",
+    "Boosts",
+    "FamilyTies",
+    "GiveLinksForm",
+    "PersonalForms",
+    "Profile",
+    "Promocodes",
+    "Quests",
+    "Season",
+    "Shop",
+    "UTMLinksForm",
 ]

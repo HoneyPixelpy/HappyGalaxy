@@ -1,9 +1,7 @@
-from aiogram.filters import Filter
 from aiogram import types
+from aiogram.filters import Filter
 from aiogram.fsm.context import FSMContext
-
 from config import admins
-
 from MainBot.base.models import Users
 
 
@@ -16,16 +14,13 @@ class ChatTypeFilter(Filter):
 
 
 class IsAdmin(Filter):
-        
+
     async def __call__(self, message: types.Message, state: FSMContext) -> bool:
         data = await state.get_data()
-        user: Users = data.get('user')
-        if (
-            user and (
-                user.user_id in admins or 
-                user.role_private in ['admin', 'manager', 'owner']
-                )
-            ):
+        user: Users = data.get("user")
+        if user and (
+            user.user_id in admins or user.role_private in ["admin", "manager", "owner"]
+        ):
             return True
         else:
             return False

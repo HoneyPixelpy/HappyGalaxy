@@ -1,9 +1,10 @@
 import datetime
 
-from celery import shared_task
 import pytz
+from celery import shared_task
 
-from .services import aggregation_pipeline, sync_copy_bd, continue_reg_mailing, auto_reject_old_quest_attempts
+from .services import (aggregation_pipeline, auto_reject_old_quest_attempts,
+                       continue_reg_mailing, sync_copy_bd)
 
 
 @shared_task(name='utils.tasks.database_backup_task', bind=True)

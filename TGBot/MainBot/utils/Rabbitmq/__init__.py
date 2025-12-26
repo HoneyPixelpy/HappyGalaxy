@@ -1,2 +1,2 @@
-__all__ = ['RabbitMQ']
+__all__ = ["RabbitMQ"]
 from .producer import RabbitMQProducer as RabbitMQ

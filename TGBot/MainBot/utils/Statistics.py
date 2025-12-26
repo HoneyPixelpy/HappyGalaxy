@@ -1,18 +1,36 @@
 from typing import Any
-from asgiref.sync import sync_to_async
 
-from django.db.models import Count, F, ExpressionWrapper, IntegerField, Avg, Case, When, Value, CharField, Max, DurationField, Sum
+from asgiref.sync import sync_to_async
+from django.db.models import (
+    Avg,
+    Case,
+    CharField,
+    Count,
+    DurationField,
+    ExpressionWrapper,
+    F,
+    IntegerField,
+    Max,
+    Sum,
+    Value,
+    When,
+)
 from django.db.models.functions import ExtractYear, Now, TruncDate
 from loguru import logger
-
-from MainBot.base.models import Family_Ties, Purchases, Sigma_Boosts, SubscribeQuest, Users
+from MainBot.base.models import (
+    Family_Ties,
+    Purchases,
+    Sigma_Boosts,
+    SubscribeQuest,
+    Users,
+)
 
 
 class DemographicStatistics:
     """
     Демографическая статистика
     """
-    
+
     def __init__(self):
         pass
 
@@ -21,7 +39,7 @@ class DemographicStatistics:
         Делаем подсчет по ролям.
         """
         return await sync_to_async(list)(
-            Users.objects.values('_role').annotate(count=Count('id'))
+            Users.objects.values("_role").annotate(count=Count("id"))
         )
 
     async def _gender_distribution(self) -> list[dict]:
@@ -29,7 +47,7 @@ class DemographicStatistics:
         Делаем подсчет по гендеру.
         """
         return await sync_to_async(list)(
-            Users.objects.values('gender').annotate(count=Count('id'))
+            Users.objects.values("gender").annotate(count=Count("id"))
         )
 
     async def _age_group(self, role: str) -> list[dict]:
@@ -42,16 +60,18 @@ class DemographicStatistics:
         # }
         """
         return await sync_to_async(list)(
-            Users.objects.filter(_role=role).annotate(
+            Users.objects.filter(_role=role)
+            .annotate(
                 age=ExpressionWrapper(
-                    ExtractYear(Now()) - ExtractYear('_age'),
-                    output_field=IntegerField()
+                    ExtractYear(Now()) - ExtractYear("_age"),
+                    output_field=IntegerField(),
                 )
-            ).values('age').annotate(
-                count=Count('id')
-            ).order_by('age')
+            )
+            .values("age")
+            .annotate(count=Count("id"))
+            .order_by("age")
         )
-    
+
     # async def _age_groups(self) -> dict[str:list[dict]]:
     #     """
     #     Делаем подсчет по возрасту для всех ролей
@@ -60,7 +80,7 @@ class DemographicStatistics:
     #         role: await self._age_group(role)
     #         for role in roles.keys()
     #     }
-    
+
     async def get_demographics(self) -> None:
         """
         Стата по демографике.
@@ -78,21 +98,21 @@ class Lumberjack_GameStatistics:
     """
     Игровая аналитика (Дровосек)
     """
-    
+
     def __init__(self):
         pass
-    
+
     def _top_starcoins_players(self) -> Any:
         """
         Топ игроков по старкоинам
         """
-        return list(Users.objects.order_by('-all_starcoins')[:10])
+        return list(Users.objects.order_by("-all_starcoins")[:10])
 
     def _average_earnings_game(self) -> Any:
         """
         Средний заработок в игре
         """
-        return Users.objects.aggregate(avg_starcoins=Avg('all_starcoins'))
+        return Users.objects.aggregate(avg_starcoins=Avg("all_starcoins"))
 
     async def _boost_activity(self) -> Any:
         """
@@ -101,62 +121,66 @@ class Lumberjack_GameStatistics:
         boost_stats = await sync_to_async(list)(
             Sigma_Boosts.objects.annotate(
                 boost_type=Case(
-                    When(income_level__gt=0, then=Value('income')),
-                    When(energy_capacity_level__gt=0, then=Value('energy_capacity')),
-                    When(recovery_level__gt=0, then=Value('recovery')),
-                    When(passive_income_level__gt=0, then=Value('passive_income')),
-                    default=Value('none'),
-                    output_field=CharField()
+                    When(income_level__gt=0, then=Value("income")),
+                    When(energy_capacity_level__gt=0, then=Value("energy_capacity")),
+                    When(recovery_level__gt=0, then=Value("recovery")),
+                    When(passive_income_level__gt=0, then=Value("passive_income")),
+                    default=Value("none"),
+                    output_field=CharField(),
                 )
-            ).values('boost_type').annotate(
-                total_users=Count('user_id', distinct=True),
+            )
+            .values("boost_type")
+            .annotate(
+                total_users=Count("user_id", distinct=True),
                 avg_level=Avg(
                     Case(
-                        When(boost_type='income', then='income_level'),
-                        When(boost_type='energy_capacity', then='energy_capacity_level'),
-                        When(boost_type='recovery', then='recovery_level'),
-                        When(boost_type='passive_income', then='passive_income_level'),
+                        When(boost_type="income", then="income_level"),
+                        When(
+                            boost_type="energy_capacity", then="energy_capacity_level"
+                        ),
+                        When(boost_type="recovery", then="recovery_level"),
+                        When(boost_type="passive_income", then="passive_income_level"),
                         default=0,
-                        output_field=IntegerField()
+                        output_field=IntegerField(),
                     )
                 ),
                 max_level=Max(
                     Case(
-                        When(boost_type='income', then='income_level'),
-                        When(boost_type='energy_capacity', then='energy_capacity_level'),
-                        When(boost_type='recovery', then='recovery_level'),
-                        When(boost_type='passive_income', then='passive_income_level'),
+                        When(boost_type="income", then="income_level"),
+                        When(
+                            boost_type="energy_capacity", then="energy_capacity_level"
+                        ),
+                        When(boost_type="recovery", then="recovery_level"),
+                        When(boost_type="passive_income", then="passive_income_level"),
                         default=0,
-                        output_field=IntegerField()
+                        output_field=IntegerField(),
                     )
-                )
-            ).exclude(boost_type='none')
+                ),
+            )
+            .exclude(boost_type="none")
         )
-        
+
         # Дополнительная аналитика по пассивному доходу
         passive_income_stats = await sync_to_async(
-            lambda: Sigma_Boosts.objects.filter(
-                passive_income_level__gt=0
-            ).aggregate(
+            lambda: Sigma_Boosts.objects.filter(passive_income_level__gt=0).aggregate(
                 avg_claim_interval=Avg(
                     ExpressionWrapper(
-                        Now() - F('_last_passive_claim'),
-                        output_field=DurationField()
+                        Now() - F("_last_passive_claim"), output_field=DurationField()
                     )
                 )
             )
         )()
-        
+
         return {
-            'boost_types': boost_stats,
-            'passive_income': {
-                'total_users': await sync_to_async(
+            "boost_types": boost_stats,
+            "passive_income": {
+                "total_users": await sync_to_async(
                     Sigma_Boosts.objects.filter(passive_income_level__gt=0).count
                 )(),
-                **passive_income_stats
-            }
+                **passive_income_stats,
+            },
         }
-    
+
     async def get_lumberjack_game(self) -> Any:
         """
         Итоги дровосека
@@ -179,9 +203,9 @@ class SocialTiesStatistics:
         Количество созданных семей
         """
         return await sync_to_async(list)(
-            Family_Ties.objects.values('family_id').annotate(
-                members=Count('user_id')
-            ).filter(members__gt=1)
+            Family_Ties.objects.values("family_id")
+            .annotate(members=Count("user_id"))
+            .filter(members__gt=1)
         )
 
     async def _average_children_per_parent(self) -> Any:
@@ -189,11 +213,9 @@ class SocialTiesStatistics:
         Среднее количество детей на одного родителя
         """
         return await sync_to_async(list)(
-            Users.objects.filter(
-                _role='parent'
-            ).annotate(
-                child_count=Count('family_children')
-            ).aggregate(avg=Avg('child_count'))
+            Users.objects.filter(_role="parent")
+            .annotate(child_count=Count("family_children"))
+            .aggregate(avg=Avg("child_count"))
         )
 
     async def get_social_ties(self) -> Any:
@@ -219,26 +241,21 @@ class FinancialAnalyticsStatistics:
         """
         Общее количество старкоинов в системе
         """
-        return await sync_to_async(
-            Users.objects.aggregate(total=Sum('_starcoins'))
-        )
+        return await sync_to_async(Users.objects.aggregate(total=Sum("_starcoins")))
 
     async def _total_starcoins_in_all_time(self) -> Any:
         """
         Общее количество старкоинов заработанных за все время
         """
-        return await sync_to_async(
-            Users.objects.aggregate(total=Sum('all_starcoins'))
-        )
+        return await sync_to_async(Users.objects.aggregate(total=Sum("all_starcoins")))
 
     async def _top_buys(self) -> Any:
         """
         Топ покупок
         """
         return await sync_to_async(list)(
-            Purchases.objects.values('item').annotate(
-                total_sold=Count('id'),
-                total_revenue=Sum('price')
+            Purchases.objects.values("item").annotate(
+                total_sold=Count("id"), total_revenue=Sum("price")
             )
         )
 
@@ -281,11 +298,10 @@ class UserActivityStatistics:
         График регистраций (по дням/неделям)
         """
         return await sync_to_async(list)(
-            Users.objects.annotate(
-                date=TruncDate('created_at')
-            ).values('date').annotate(
-                count=Count('id')
-            ).order_by('date')
+            Users.objects.annotate(date=TruncDate("created_at"))
+            .values("date")
+            .annotate(count=Count("id"))
+            .order_by("date")
         )
 
     async def _percentage_active_users(self) -> float:
@@ -347,10 +363,9 @@ class TechnicalMetricsStatistics:
         return await sync_to_async(list)(
             Users.objects.annotate(
                 session_time=ExpressionWrapper(
-                    F('updated_at') - F('created_at'),
-                    output_field=DurationField()
+                    F("updated_at") - F("created_at"), output_field=DurationField()
                 )
-            ).aggregate(avg=Avg('session_time'))
+            ).aggregate(avg=Avg("session_time"))
         )
 
     async def get_technical_metrics(self) -> Any:
@@ -372,9 +387,9 @@ class Statistics(
     FinancialAnalyticsStatistics,
     UserActivityStatistics,
     TaskEfficiencyStatistics,
-    TechnicalMetricsStatistics
-    ):
-    
+    TechnicalMetricsStatistics,
+):
+
     def __init__(self):
         super().__init__()
 
@@ -386,6 +401,3 @@ class Statistics(
         await super().get_user_activity()
         await super().get_task_efficiency()
         await super().get_technical_metrics()
-
-
-

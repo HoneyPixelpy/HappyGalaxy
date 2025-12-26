@@ -1,8 +1,9 @@
 import json
 import os
-from typing import List, Optional, Dict, Any
-from loguru import logger
+from typing import Any, Dict, List, Optional
+
 import requests
+from loguru import logger
 
 
 class DjangoAPI:

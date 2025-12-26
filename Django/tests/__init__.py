@@ -63,7 +63,7 @@
 # def mock_boosts_data():
 #     """Fixture для создания mock данных бустов"""
 #     boosts_data = Mock()
-    
+
 #     # Mock income level
 #     income_level = Mock()
 #     income_level.value_by_level.return_value = 50
@@ -71,22 +71,22 @@
 #     income_level.emoji.return_value = "💰"
 #     income_level.price.return_value = 100
 #     boosts_data.income_level = income_level
-    
+
 #     # Mock passive income level
 #     passive_income_level = Mock()
 #     passive_income_level.value_by_level.return_value = 25
 #     passive_income_level.max_level.return_value = 5
 #     boosts_data.passive_income_level = passive_income_level
-    
+
 #     # Mock energy capacity level
 #     energy_capacity_level = Mock()
 #     energy_capacity_level.value_by_level.return_value = 150
 #     energy_capacity_level.max_level.return_value = 8
 #     boosts_data.energy_capacity_level = energy_capacity_level
-    
+
 #     # Mock recovery level
 #     recovery_level = Mock()
 #     recovery_level.value_by_level.return_value = 60  # 60 minutes
 #     boosts_data.recovery_level = recovery_level
-    
+
 #     return boosts_data

@@ -1,8 +1,6 @@
-from loguru import logger
-from config import REDIS_URL
-
 import redis.asyncio as redis
-
+from config import REDIS_URL
+from loguru import logger
 
 
 class RedisManager:
@@ -18,7 +16,7 @@ class RedisManager:
                 socket_timeout=5,
                 socket_connect_timeout=5,
                 retry_on_timeout=True,
-                max_connections=10
+                max_connections=10,
             )
         return cls._instance
 

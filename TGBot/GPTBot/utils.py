@@ -1,10 +1,9 @@
-import os
-import json
 import datetime
+import json
+import os
 
+from GPTBot.config import DAILY_LIMIT, LIMITS_FILE, TIMEOUT
 from loguru import logger
-
-from GPTBot.config import LIMITS_FILE, DAILY_LIMIT, TIMEOUT
 from VKBot.task.tg import TelegramSubscriptionChecker
 
 
@@ -20,6 +19,7 @@ def save_limits(data):
     with open(LIMITS_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2)
 
+
 async def check_tg_invite(user_id):
     data = load_limits()
     user_id = str(user_id)
@@ -28,13 +28,10 @@ async def check_tg_invite(user_id):
     today_str = now.strftime("%Y-%m-%d")
 
     # Получаем информацию о пользователе или создаем новую запись
-    user_data: dict = data.get(user_id, {
-        "usage": {},
-        "privilege": {
-            "last_check": None,
-            "is_subscribed": False
-        }
-    })
+    user_data: dict = data.get(
+        user_id,
+        {"usage": {}, "privilege": {"last_check": None, "is_subscribed": False}},
+    )
 
     # Проверяем, нужно ли выполнять проверку подписки
     last_check_str = user_data["privilege"].get("last_check")
@@ -45,24 +42,28 @@ async def check_tg_invite(user_id):
         if (now - last_check) < datetime.timedelta(days=1):
             need_check = False
 
-    if need_check or not user_data['privilege']['is_subscribed']:
+    if need_check or not user_data["privilege"]["is_subscribed"]:
         try:
             # Проверяем подписку пользователя
-            is_subscribed = await TelegramSubscriptionChecker().get_chat_member("@happiness34vlz", user_id)
+            is_subscribed = await TelegramSubscriptionChecker().get_chat_member(
+                "@happiness34vlz", user_id
+            )
             logger.debug(is_subscribed)
             # Обновляем данные о подписке
-            user_data["privilege"].update({
-                "is_subscribed": is_subscribed,
-                "last_check": today_str,
-                "last_check_timestamp": now_timestamp
-            })
-            
+            user_data["privilege"].update(
+                {
+                    "is_subscribed": is_subscribed,
+                    "last_check": today_str,
+                    "last_check_timestamp": now_timestamp,
+                }
+            )
+
             # Сохраняем обновленные данные
             data[user_id] = user_data
             save_limits(data)
-            
+
             return is_subscribed
-            
+
         except Exception as e:
             print(f"Error checking subscription: {e}")
             return user_data["privilege"].get("is_subscribed", False)
@@ -71,7 +72,7 @@ async def check_tg_invite(user_id):
 
 
 def get_today():
-    return datetime.datetime.now().strftime('%Y-%m-%d')
+    return datetime.datetime.now().strftime("%Y-%m-%d")
 
 
 def check_and_inc(user_id, typ):
@@ -102,8 +103,6 @@ def set_timeout(user_id):
     save_limits(data)
 
 
-
-
 def is_timeout(user_id):
     data = load_limits()
     user_id = str(user_id)
@@ -125,4 +124,3 @@ def reset_limits(user_id):
         data[user_id]["usage"] = {}
         data[user_id]["timeout"] = None
         save_limits(data)
-

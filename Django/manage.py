@@ -1,14 +1,16 @@
 #!/usr/bin/env python
 import os
 import sys
+
 from dotenv import load_dotenv
 
 # Загрузка переменных окружения
 load_dotenv()
 
+
 def run_django():
     """Запуск Django в отдельном потоке"""
-    os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'conf.settings')
+    os.environ.setdefault("DJANGO_SETTINGS_MODULE", "conf.settings")
     try:
         from django.core.management import execute_from_command_line
     except ImportError as exc:
@@ -19,5 +21,6 @@ def run_django():
         ) from exc
     execute_from_command_line(sys.argv)
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     run_django()

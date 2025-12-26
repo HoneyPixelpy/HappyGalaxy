@@ -1,23 +1,26 @@
 # tests/test_models.py
 # from django.test import TransactionTestCase
 # from django.test import TestCase
-from datetime import datetime, timezone as dt_tz
-import pytest
+from datetime import datetime
+from datetime import timezone as dt_tz
+
 # from django.db import IntegrityError
 from zoneinfo import ZoneInfo
-from bot.models import roles, Users
+
+import pytest
+from bot.models import Users, roles
 from bot.serializers import UserSerializer
 
 
 class TestUserModel:
     """Тесты для модели User"""
-    
+
     @pytest.mark.django_db
     def test_user_serializer(self, fake_user_data):
         """Проверяем сериализатор"""
 
         user = UserSerializer(data=fake_user_data)
-        
+
         assert user.is_valid(), user.errors
 
     @pytest.mark.django_db
@@ -34,9 +37,7 @@ class TestUserModel:
     @pytest.mark.django_db
     def test_user_create_minimal(self, fake_user_data):
         """Создание пользователя с минимально обязательными полями."""
-        user = Users.objects.create(
-            user_id=fake_user_data["user_id"]
-        )
+        user = Users.objects.create(user_id=fake_user_data["user_id"])
 
         assert user.pk is not None
         assert user.user_id == fake_user_data["user_id"]
@@ -46,7 +47,7 @@ class TestUserModel:
 
     @pytest.mark.django_db
     def test_authorised_at_timezone_conversion(self):
-        
+
         user = Users.objects.create(user_id=1)
 
         moscow = ZoneInfo("Europe/Moscow")
@@ -65,13 +66,16 @@ class TestUserModel:
         assert value.hour == 12  # локальное время такое же, как ставили
 
     @pytest.mark.django_db
-    @pytest.mark.parametrize("code, expected_name", [
-        ("child", "⚡️ Главный герой"),
-        ("parent", "❤️ Родитель"),
-        ("worker", "🎖 Современник Галактики"),
-        ("manager", "🛠 Работник"),
-        (None, "Незнакомец"),
-    ])
+    @pytest.mark.parametrize(
+        "code, expected_name",
+        [
+            ("child", "⚡️ Главный герой"),
+            ("parent", "❤️ Родитель"),
+            ("worker", "🎖 Современник Галактики"),
+            ("manager", "🛠 Работник"),
+            (None, "Незнакомец"),
+        ],
+    )
     def test_role_name(self, code, expected_name):
         user = Users.objects.create(user_id=1, _role=code)
         assert user.role_name == expected_name
@@ -113,16 +117,10 @@ class TestUserModel:
     @pytest.mark.django_db
     def test_all_starcoins_added(self):
         user = Users.objects.create(user_id=1)
-        
+
         assert user.starcoins == 0
-        
+
         user.starcoins += 4
         user.save()
-        
+
         assert user.all_starcoins == 4
-
-
-
-
-
-
