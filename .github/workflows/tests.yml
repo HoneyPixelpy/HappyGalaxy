@@ -25,8 +25,23 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
       
-      - name: Setup Docker
-        uses: docker/setup-docker-action@v3
+      - name: Setup Docker Buildx (вместо setup-docker-action)
+        uses: docker/setup-buildx-action@v3
+      
+      - name: Verify Docker is available
+        run: |
+          # На Ubuntu Docker уже предустановлен!
+          echo "Docker version:"
+          docker --version
+          
+          echo "Docker Compose version:"
+          docker-compose --version || docker compose version || echo "Installing docker-compose..."
+          
+          # Если нет docker-compose, устанавливаем
+          if ! command -v docker-compose &> /dev/null && ! command -v docker compose &> /dev/null; then
+            sudo apt-get update
+            sudo apt-get install -y docker-compose-v2
+          fi
 
       - name: Start containers
         run: |
