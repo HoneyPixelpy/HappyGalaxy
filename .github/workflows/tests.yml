@@ -20,20 +20,24 @@ jobs:
           version: 'latest'
 
 
-      - name: Create environment file
+      - name: Create .env file
         run: |
-          # Создаем .env файл для Docker Compose
+          # Все секреты доступны через
           cat > .env << EOF
           ALLOWED_HOSTS=${{ secrets.ALLOWED_HOSTS }}
           REDIS_URL=${{ secrets.REDIS_URL }}
           SECRET_KEY=${{ secrets.SECRET_KEY }}
           POSTGRES_DB=${{ secrets.POSTGRES_DB }}
-          POSTGRES_USER:=${{ secrets.POSTGRES_USER }}
+          POSTGRES_USER=${{ secrets.POSTGRES_USER }}
           POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
           POSTGRES_HOST=${{ secrets.POSTGRES_HOST }}
           POSTGRES_PORT=${{ secrets.POSTGRES_PORT }}
           DEBUG=${{ secrets.DEBUG }}
           EOF
+          
+          # Проверяем, что файл создан
+          echo "=== .env file created (non-sensitive parts) ==="
+          grep -E "^(ALLOWED_HOSTS|POSTGRES_HOST|POSTGRES_PORT|DEBUG)" .env || true
 
       - name: Start containers
         run: |
