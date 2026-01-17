@@ -30,6 +30,22 @@ jobs:
         with:
           version: 'latest'
 
+
+      - name: Create environment file
+        run: |
+          # Создаем .env файл для Docker Compose
+          cat > .env << EOF
+          ALLOWED_HOSTS=${{ secrets.ALLOWED_HOSTS }}
+          REDIS_URL=${{ secrets.REDIS_URL }}
+          SECRET_KEY=${{ secrets.SECRET_KEY }}
+          POSTGRES_DB=${{ secrets.POSTGRES_DB }}
+          POSTGRES_USER:=${{ secrets.POSTGRES_USER }}
+          POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
+          POSTGRES_HOST=${{ secrets.POSTGRES_HOST }}
+          POSTGRES_PORT=${{ secrets.POSTGRES_PORT }}
+          DEBUG=${{ secrets.DEBUG }}
+          EOF
+
       - name: Start containers
         run: |
           docker compose up -d django analytic_consumer
