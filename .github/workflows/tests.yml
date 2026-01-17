@@ -18,30 +18,6 @@ jobs:
         uses: docker/setup-compose-action@v1
         with:
           version: 'latest'
-
-      - name: Test secrets directly
-        run: |
-          echo "Testing if secrets are accessible..."
-          
-          # Пробуем получить каждую переменную
-          echo "1. ALLOWED_HOSTS exists: ${{ secrets.ALLOWED_HOSTS != '' }}"
-          echo "2. POSTGRES_DB exists: ${{ secrets.POSTGRES_DB != '' }}"
-          echo "3. POSTGRES_USER exists: ${{ secrets.POSTGRES_USER != '' }}"
-          
-          # Пробуем записать в файл
-          echo "ALLOWED_HOSTS=${{ secrets.ALLOWED_HOSTS }}" > test.env
-          echo "POSTGRES_USER=${{ secrets.POSTGRES_USER }}" >> test.env
-          
-          echo "=== Contents of test.env ==="
-          cat test.env
-          
-          echo "=== Checking file size ==="
-          ls -la test.env
-          echo "Number of lines: $(wc -l < test.env)"
-        env:
-          # Явно передаем переменные окружения в step
-          TEST_HOSTS: ${{ secrets.ALLOWED_HOSTS }}
-          TEST_DB: ${{ secrets.POSTGRES_DB }}
           
       - name: Create .env file
         run: |
@@ -58,13 +34,18 @@ jobs:
           DEBUG=${{ secrets.DEBUG }}
           EOF
           
-          # Проверяем, что файл создан
-          echo "=== .env file created (non-sensitive parts) ==="
-          grep -E "^(ALLOWED_HOSTS|POSTGRES_HOST|POSTGRES_PORT|DEBUG)" .env || true
+          echo "=== .env file created ==="
+          ls -la .env
+          echo "Lines in .env: $(wc -l < .env)"
+
+      - name: Debug - Show non-sensitive env vars
+        run: |
+          echo "=== Checking .env (non-sensitive) ==="
+          grep -E "^(ALLOWED_HOSTS|POSTGRES_HOST|POSTGRES_PORT|DEBUG|REDIS_URL)" .env || true
 
       - name: Start containers
         run: |
-          docker compose up -d django analytic_consumer
+          docker compose --env-file .env up -d django analytic_consumer
 
           sleep 10
 
