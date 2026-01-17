@@ -27,8 +27,6 @@ jobs:
       
       - name: Setup Docker
         uses: docker/setup-docker-action@v3
-        with:
-          docker-version: '24.0'
 
       - name: Start containers
         run: |
