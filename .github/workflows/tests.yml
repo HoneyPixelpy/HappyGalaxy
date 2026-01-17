@@ -1,10 +1,10 @@
 name: Django Tests
 on:
+  workflow_dispatch:  # Если хотите запускать вручную из GitHub UI
   # push:
   #   branches: [ main, multiservice/main ]
   # pull_request:
   #   branches: [ main ]
-  workflow_dispatch:  # Если хотите запускать вручную из GitHub UI
 
 jobs:
   run-tests:
