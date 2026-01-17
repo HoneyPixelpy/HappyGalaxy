@@ -74,6 +74,7 @@ class Users(PydanticBase):
     # Статусы
     active: bool = Field(False)
     ban: bool = Field(False)
+    purch_ban: bool = Field(False)
 
     # Валюта
     starcoins: float = Field(0.0)
@@ -130,6 +131,8 @@ class Purchases(PydanticBase):
     description: Optional[str] = Field(None, description="Описание покупки")
     cost: Optional[float] = Field(None, description="Стоимость покупки")
     delivery_data: Optional[str] = Field(None, description="Данные для выдачи")
+    product_ids: List[int] = Field(default_factory=list, description="ID товаров")
+    message_id: Optional[int] = Field(None, description="ID сообщения")
     completed: bool = Field(False, description="Статус завершения")
     completed_at: Optional[datetime] = Field(None, description="Дата завершения")
 

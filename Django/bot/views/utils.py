@@ -1,3 +1,5 @@
+import asyncio
+import json
 import re
 import threading
 from functools import wraps
@@ -6,6 +8,9 @@ from typing import Any, Callable
 from loguru import logger
 from rest_framework import status
 from rest_framework.response import Response
+
+from bot.service.exceptions import DuplicateOperationException
+from bot.service.idempotency import Idempotency
 
 from .error import RaisesResponse
 
@@ -127,9 +132,8 @@ def queue_request(func):
     """
     Декоратор для последовательной обработки запросов к БД
     """
-
     @wraps(func)
-    def wrapper(*args, **kwargs):
+    def wrapper(self, request, *args, **kwargs):
         """
         Декорируем обработчики запросов для
         отловли частых ошибок
@@ -141,11 +145,14 @@ def queue_request(func):
         """
         try:
             # NOTE с переходом на PostgreSQL уберем на простое выполнение метода
-            return func(*args, **kwargs)
-            return DatabaseQueue().request(func, *args, **kwargs)
-        except (
-            RaisesResponse
-        ) as e:  # NOTE почти всегда ответ возвращается через эту ошибку
+            return func(self, request, *args, **kwargs)
+            # return DatabaseQueue().request(func, *args, **kwargs)
+        except DuplicateOperationException as e:
+            logger.error(e)
+            return Response(data=e.detail, status=status.HTTP_409_CONFLICT)
+        except RaisesResponse as e:
+            # NOTE почти всегда ответ возвращается через эту ошибку
+            logger.error(e)
             return Response(data=e.data, status=e.status)
         except Exception as e:
             error = "\n{}: {}\n{}".format(str(func), e.__class__.__name__, str(e))
@@ -154,6 +161,82 @@ def queue_request(func):
                 {"error": error}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
+    return wrapper
+
+
+def idempotency_request(func):
+    """
+    Декоратор для работы с idempotency_key
+    """
+    @wraps(func)
+    def wrapper(self, request, *args, **kwargs):
+        """
+        Декорируем обработчики запросов для
+        проверки и автовозврата ответов на запросы
+        которые уже отработали или в работе
+
+        WARNING:
+            Для POST запросов
+            которые могут продублироваться
+            
+            Для использования обязательно первым аргументом
+            должен быть request
+        """
+        """
+        Проверка перед обработкой
+        """
+        ttl = 300
+        idempotency_key = (
+            request.META.get('HTTP_IDEMPOTENCY_KEY') or 
+            request.headers.get('IDEMPOTENCY-KEY', None)
+        )
+        logger.debug(idempotency_key)
+        if not idempotency_key:
+            return Response(
+                {'error': 'Idempotency-Key header required'}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        idempotency_key = request.path.replace('/api/v1/', '') + idempotency_key
+        logger.debug(idempotency_key)
+
+        Idempotency.start(
+            idempotency_key=idempotency_key,
+            ttl=ttl
+        )
+                    
+        try:
+            """
+            Выполняем обработку запроса
+            """
+            response: Response = func(self, request, *args, **kwargs)
+            
+            status_code = response.status_code
+            data = response.data
+            
+            return response
+        except RaisesResponse as e:
+            status_code = e.status
+            data = e.data
+            raise
+        except Exception as e:
+            status_code = 400
+            data = str(e)
+            raise
+        finally:
+            """
+            Сохраняем результат в Redis с TTL 24ч
+            """
+            """Отмечаем операцию как выполненную"""
+            logger.debug(status_code)
+            logger.debug(data)
+            
+            Idempotency.end(
+                idempotency_key=idempotency_key,
+                ttl=ttl,
+                status_code=status_code,
+                data=data
+            )
     return wrapper
 
 

@@ -4,8 +4,9 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 from MainBot.base.forms import Lumberjack_GameForms
 from MainBot.base.models import Lumberjack_Game, Users
 from MainBot.base.orm_requests import Lumberjack_GameMethods
-from MainBot.keyboards.inline import IKB as inline
+from MainBot.keyboards import inline
 from MainBot.utils.MyModule import Func
+from MainBot.utils.MyModule.message import MessageManager
 from MainBot.utils.Rabbitmq import RabbitMQ
 
 
@@ -15,15 +16,28 @@ class LumberjackGame:
     col = 5
 
     @classmethod
-    async def msg_before_game(cls, message: types.Message) -> None:
+    async def msg_before_game(
+        cls,
+        user: Users,
+        message: types.Message | types.CallbackQuery
+        ) -> None:
         """
         Отправляет сообщение перед игрой
         """
-        await message.bot.send_message(
-            chat_id=message.chat.id,
-            text=texts.Game.Texts.before_game,
-            reply_markup=await inline.before_game(),
+        await MessageManager(
+            message,
+            user.user_id
+        ).send_or_edit(
+            texts.Game.Texts.before_game,
+            await inline.before_game(),
+            "game"
         )
+
+        # await message.bot.send_message(
+        #     chat_id=message.chat.id,
+        #     text=texts.Game.Texts.before_game,
+        #     reply_markup=await inline.before_game(),
+        # )
 
     @classmethod
     async def create_game_text(
@@ -88,16 +102,14 @@ class LumberjackGame:
         keyboard, game_user = await cls.create_game_keyboard(user)
         energy_text = await cls.create_game_text(user, game_user, success_or_income)
 
-        try:
-            await call.message.edit_text(text=energy_text, reply_markup=keyboard)
-        except exceptions.TelegramBadRequest:
-            await call.message.bot.send_message(
-                chat_id=call.message.chat.id, text=energy_text, reply_markup=keyboard
-            )
-            try:
-                await call.message.delete()
-            except:
-                pass
+        await MessageManager(
+            call,
+            user.user_id
+        ).send_or_edit(
+            energy_text,
+            keyboard,
+            "game"
+        )
 
     # @classmethod
     # async def send_msg_game(
@@ -156,7 +168,7 @@ class LumberjackGame:
         if success_or_income:
             try:
                 await call.answer(f"+{success_or_income}")
-            except:
+            except: # exceptions.TelegramBadRequest
                 pass
 
             await cls.send_call_game(call, user, success_or_income)

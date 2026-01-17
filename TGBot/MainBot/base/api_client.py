@@ -5,7 +5,7 @@ from typing import Any, Dict, Optional
 import aiohttp
 import requests
 from loguru import logger
-from MainBot.utils.errors import InternalServerErrorClass
+from MainBot.utils.errors import DuplicateOperationError, InternalServerErrorClass
 
 
 class DjangoAPI:
@@ -19,16 +19,20 @@ class DjangoAPI:
         endpoint: str,
         data: Optional[Dict] = None,
         params: Optional[Dict] = None,
+        idempotency_key: Optional[str] = None
     ) -> Any:
         try:
+            headers = {"Content-Type": "application/json"}
+            if idempotency_key:
+                headers["Idempotency-Key"] = idempotency_key
             async with aiohttp.ClientSession() as session:
                 async with session.request(
                     method,
                     f"{self.base_url}{endpoint}",
                     json=data,
                     params=params,
-                    headers={"Content-Type": "application/json"},
-                    timeout=20,
+                    headers=headers,
+                    timeout=20
                 ) as response:
                     if response.status == 200 or response.status == 201:
                         # Пытаемся получить содержимое ответа в наиболее универсальном виде
@@ -51,11 +55,16 @@ class DjangoAPI:
                             )
                             # NOTE тут нужно вызывать какую-то ошибку для отлавливания в rabbitmq для повторного запроса
                             return None
+                    elif response.status == 404: return None
+                    elif response.status == 409: raise DuplicateOperationError()
                     elif response.status == 500:
                         await InternalServerErrorClass().send(
                             f"Неопределенная ошибка, {method} {self.base_url}{endpoint} {str(data)} {str(params)}\n\n{str(response)}"
                         )
                         # NOTE тут нужно вызывать какую-то ошибку для отлавливания в rabbitmq для повторного запроса
+                    else:
+                        logger.warning(
+                            f"Код статуса который не обрабатывается: {response.status} -> None")
                     return None
 
         except TimeoutError:
@@ -121,8 +130,8 @@ class UsersRequests(DjangoAPI):
     async def get_by_user_id(self, user_id: int) -> Optional[Dict]:
         return await self._make_request("GET", f"/users/{user_id}/")
 
-    async def create_user(self, user_data: Dict) -> Optional[Dict]:
-        return await self._make_request("POST", "/users/", user_data)
+    async def create_user(self, user_data: Dict, idempotency_key: str) -> Optional[Dict]:
+        return await self._make_request("POST", "/users/", user_data, idempotency_key=idempotency_key)
 
     async def get_all_users(self, **kwargs) -> Optional[Dict]:
         return await self._make_request("GET", "/users/", data=kwargs)
@@ -137,17 +146,6 @@ class UsersRequests(DjangoAPI):
         return await self._make_request(
             "GET", "/users/check_phone/", params={"phone": phone}
         )
-
-    # async def check_fio(self, last_name: str, first_name: str, middle_name: str) -> Optional[Dict]:
-    #     return await self._make_request(
-    #         "GET",
-    #         "/users/check_fio/",
-    #         params={
-    #             "last_name": last_name,
-    #             "first_name": first_name,
-    #             "middle_name": middle_name
-    #         }
-    #     )
 
     async def check_nickname(self, nickname: str) -> Optional[Dict]:
         return await self._make_request(
@@ -198,14 +196,14 @@ class Family_TiesRequests(DjangoAPI):
             params={"parent_id": parent_id, "user_id": user_id},
         )
 
-    async def create_family(self, user_data: Dict) -> Optional[Dict]:
-        return await self._make_request("POST", "/family-ties/", user_data)
+    async def create_family(self, user_data: Dict, idempotency_key: str) -> Optional[Dict]:
+        return await self._make_request("POST", "/family-ties/", user_data, idempotency_key=idempotency_key)
 
 
 class PurchasesRequests(DjangoAPI):
 
-    async def create_purch(self, user_data: Dict) -> Optional[Dict]:
-        return await self._make_request("POST", "/purchases/", user_data)
+    async def create_purch(self, user_data: Dict, idempotency_key: str) -> Optional[Dict]:
+        return await self._make_request("POST", "/purchases/", user_data, idempotency_key=idempotency_key)
 
     async def get_user_purchases(self, user_id: int, completed: bool) -> Optional[Dict]:
         return await self._make_request(
@@ -243,6 +241,16 @@ class PurchasesRequests(DjangoAPI):
     async def answer_buy(self, params: Dict) -> Optional[int]:
         return await self._make_request(
             "GET", "/purchases/answer_buy/", params
+        )
+
+    async def product_message_id(self, user_data: Dict) -> Optional[Dict]:
+        return await self._make_request(
+            "PATCH", "/purchases/product_message_id/", user_data
+        )
+
+    async def rollback_buy(self, user_data: Dict) -> Optional[Dict]:
+        return await self._make_request(
+            "PATCH", "/purchases/rollback_buy/", user_data
         )
 
 
@@ -357,25 +365,25 @@ class Work_KeysRequests(DjangoAPI):
 
 class BonusesRequests(DjangoAPI):
 
-    async def create_bonus(self, user_data: Dict) -> Optional[Dict]:
-        return await self._make_request("POST", "/bonuses/", user_data)
+    async def create_bonus(self, user_data: Dict, idempotency_key: str) -> Optional[Dict]:
+        return await self._make_request("POST", "/bonuses/", user_data, idempotency_key=idempotency_key)
 
     async def get_by_id(self, id: int) -> Optional[Dict]:
         return await self._make_request("GET", f"/bonuses/{id}/")
 
-    async def claim_bonus(self, user_data: Dict) -> Optional[Dict]:
-        return await self._make_request("POST", "/bonuses/claim_bonus/", user_data)
+    async def claim_bonus(self, user_data: Dict, idempotency_key: str) -> Optional[Dict]:
+        return await self._make_request("POST", "/bonuses/claim_bonus/", user_data, idempotency_key=idempotency_key)
 
 
-class UseBonusesRequests(DjangoAPI):
+# class UseBonusesRequests(DjangoAPI):
 
-    async def create_bonus(self, user_data: Dict) -> Optional[Dict]:
-        return await self._make_request("POST", "/use-bonuses/", user_data)
+#     async def create_bonus(self, user_data: Dict, idempotency_key: str) -> Optional[Dict]:
+#         return await self._make_request("POST", "/use-bonuses/", user_data, idempotency_key=idempotency_key)
 
-    async def get_connection(self, user_id: int, bonus_id: int) -> Optional[Dict]:
-        return await self._make_request(
-            "GET", "/use-bonuses/", params={"user_id": user_id, "bonus_id": bonus_id}
-        )
+#     async def get_connection(self, user_id: int, bonus_id: int) -> Optional[Dict]:
+#         return await self._make_request(
+#             "GET", "/use-bonuses/", params={"user_id": user_id, "bonus_id": bonus_id}
+#         )
 
 
 class QuestsRequests(DjangoAPI):
@@ -401,8 +409,8 @@ class QuestsRequests(DjangoAPI):
 
 class UseQuestsRequests(DjangoAPI):
 
-    async def create_quest(self, user_data: Dict) -> Optional[Dict]:
-        return await self._make_request("POST", "/use-quests/", user_data)
+    async def create_quest(self, user_data: Dict, idempotency_key: str) -> Optional[Dict]:
+        return await self._make_request("POST", "/use-quests/", user_data, idempotency_key=idempotency_key)
 
     async def get_connection(self, user_id: int, quest_id: int) -> Optional[Dict]:
         return await self._make_request(
@@ -426,9 +434,9 @@ class UseQuestsRequests(DjangoAPI):
             "DELETE", "/use-quests/back_tg_quest/", user_data
         )
 
-    async def create_idea_daily(self, user_data: Dict) -> Optional[Dict]:
+    async def create_idea_daily(self, user_data: Dict, idempotency_key: str) -> Optional[Dict]:
         return await self._make_request(
-            "POST", "/use-quests/create_idea_daily/", user_data
+            "POST", "/use-quests/create_idea_daily/", user_data, idempotency_key=idempotency_key
         )
 
     async def success_idea_daily(self, user_data: Dict) -> Optional[Dict]:
@@ -457,17 +465,19 @@ class RangsRequests(DjangoAPI):
 
 class PromocodesRequests(DjangoAPI):
 
-    async def activate(self, user_id: int, code: str) -> Optional[Dict]:
+    async def activate(self, user_id: int, code: str, idempotency_key: str) -> Optional[Dict]:
         return await self._make_request(
-            "POST", "/promocodes/", data={"user_id": user_id, "code": code}
+            "POST", "/promocodes/", data={"user_id": user_id, "code": code},
+            idempotency_key=idempotency_key
         )
 
 
 class ManagementLinksRequests(DjangoAPI):
 
-    async def activate(self, user_id: int, utm: str) -> Optional[Dict]:
+    async def activate(self, user_id: int, utm: str, idempotency_key: str) -> Optional[Dict]:
         return await self._make_request(
-            "POST", "/management-link/", data={"user_id": user_id, "utm": utm}
+            "POST", "/management-link/", data={"user_id": user_id, "utm": utm},
+            idempotency_key=idempotency_key
         )
 
 
@@ -513,3 +523,61 @@ class InteractiveGameRequests(DjangoAPI):
         return await self._make_request(
             "PATCH", f"/interactive-game/{game_id}/end_game/", data
         )
+
+
+class RatingRequests(DjangoAPI):
+
+    async def daily_login(self, user_id: int) -> Optional[Dict]:
+        return await self._make_request(
+            "GET",
+            "/rating/daily_login/",
+            params={
+                "user_id": user_id
+            }
+        )
+
+    async def collect_starcoins(self, user_id: int) -> Optional[Dict]:
+        return await self._make_request(
+            "GET",
+            "/rating/collect_starcoins/",
+            params={
+                "user_id": user_id
+            }
+        )
+
+    async def guess_country(self, user_id: int) -> Optional[Dict]:
+        return await self._make_request(
+            "GET",
+            "/rating/guess_country/",
+            params={
+                "user_id": user_id
+            }
+        )
+
+    async def make_clicks(self, user_id: int) -> Optional[Dict]:
+        return await self._make_request(
+            "GET",
+            "/rating/make_clicks/",
+            params={
+                "user_id": user_id
+            }
+        )
+
+    async def completed_quests(self, user_id: int) -> Optional[Dict]:
+        return await self._make_request(
+            "GET",
+            "/rating/completed_quests/",
+            params={
+                "user_id": user_id
+            }
+        )
+
+    async def invited_friends(self, user_id: int) -> Optional[Dict]:
+        return await self._make_request(
+            "GET",
+            "/rating/invited_friends/",
+            params={
+                "user_id": user_id
+            }
+        )
+

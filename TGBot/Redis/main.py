@@ -28,9 +28,6 @@ class RedisManager:
         except redis.ConnectionError as e:
             logger.error(f"Redis connection error: {e}")
             raise
-        except Exception as e:
-            logger.error(f"Redis error: {e}")
-            raise
 
     async def close(self):
         if self._instance and self._instance.redis:

@@ -5,6 +5,7 @@ from MainBot.base.forms import Sigma_BoostsForms
 from MainBot.base.models import Users
 from MainBot.base.orm_requests import Sigma_BoostsMethods
 from MainBot.utils.Games import GeoHuntManager, LumberjackManager
+from MainBot.utils.MyModule.message import MessageManager
 
 
 class Boosts:
@@ -40,22 +41,16 @@ class Boosts:
             nickname=user.nickname, user_id=user.user_id, starcoins=user.starcoins
         )
 
-        try:
-            await call.message.edit_text(
-                text=text,
-                reply_markup=types.InlineKeyboardMarkup(
-                    inline_keyboard=inline_keyboard
-                ),
-            )
-        except:
-            await call.message.bot.send_message(
-                chat_id=user.user_id,
-                text=text,
-                reply_markup=types.InlineKeyboardMarkup(
-                    inline_keyboard=inline_keyboard
-                ),
-            )
-            await call.message.delete()
+        await MessageManager(
+            call,
+            user.user_id
+        ).send_or_edit(
+            text,
+            types.InlineKeyboardMarkup(
+                inline_keyboard=inline_keyboard
+            ),
+            "game"
+        )
 
     async def build_boost_text(
         self,
@@ -109,11 +104,8 @@ class Boosts:
         else:
             text = "<b>" + texts.Boosts.Texts.max_level + "</b>"
             if alert:
-                try:
-                    await call.answer(texts.Boosts.Texts.max_level, show_alert=True)
-                    return
-                except:
-                    pass
+                await call.answer(texts.Boosts.Texts.max_level, show_alert=True)
+                return
 
         inline_keyboard.append(
             [
@@ -123,22 +115,16 @@ class Boosts:
             ]
         )
 
-        try:
-            await call.message.edit_text(
-                text=text,
-                reply_markup=types.InlineKeyboardMarkup(
-                    inline_keyboard=inline_keyboard
-                ),
-            )
-        except:
-            await call.message.bot.send_message(
-                chat_id=user.user_id,
-                text=text,
-                reply_markup=types.InlineKeyboardMarkup(
-                    inline_keyboard=inline_keyboard
-                ),
-            )
-            await call.message.delete()
+        await MessageManager(
+            call,
+            user.user_id
+        ).send_or_edit(
+            text,
+            types.InlineKeyboardMarkup(
+                inline_keyboard=inline_keyboard
+            ),
+            "game"
+        )
 
     async def upgrade_boost(
         self, call: types.CallbackQuery, user: Users, name: str
@@ -153,7 +139,7 @@ class Boosts:
                     await call.answer(
                         texts.Shop.Error.not_enough_starcoins, show_alert=True
                     )
-                except:
+                except: # exceptions.TelegramBadRequest
                     await call.message.bot.send_message(
                         chat_id=user.user_id,
                         text=texts.Shop.Error.not_enough_starcoins,
@@ -170,7 +156,7 @@ class Boosts:
                     ),
                     show_alert=True,
                 )
-            except:
+            except: # exceptions.TelegramBadRequest
                 await call.message.bot.send_message(
                     chat_id=user.user_id,
                     text=texts.Boosts.Texts.success.format(

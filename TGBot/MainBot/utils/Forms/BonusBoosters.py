@@ -6,9 +6,9 @@ import texts
 from aiogram import types
 from aiogram.fsm.context import FSMContext
 from config import base_lock
-from MainBot.base.models import Lumberjack_Game, Users
-from MainBot.base.orm_requests import BonusesMethods, Lumberjack_GameMethods
-from MainBot.keyboards.reply import KB as reply
+from MainBot.base.models import Users
+from MainBot.base.orm_requests import BonusesMethods, IdempotencyKeyMethods, Lumberjack_GameMethods
+from MainBot.keyboards import reply
 from MainBot.state.state import CreateBonus
 from MainBot.utils.Forms.Profile import Profile
 from MainBot.utils.Games import GeoHuntManager, LumberjackManager
@@ -179,6 +179,9 @@ class CreateBonusBoosters(BonusDopClass):
                 expires_at=str(await self.calculate_end_time(expires_at_hours)),
                 value=size_starcoins,
                 max_quantity=max_quantity,
+                idempotency_key=await IdempotencyKeyMethods.IKgenerate(
+                    user.user_id, message
+                )
             )
             text = texts.Bonus.Texts.add_starcoins_bonus.format(
                 starcoins=bonus.bonus_data.value
@@ -191,6 +194,9 @@ class CreateBonusBoosters(BonusDopClass):
                 expires_at=str(await self.calculate_end_time(expires_at_hours)),
                 value=click_scale,
                 duration_hours=expires_at_hours,
+                idempotency_key=await IdempotencyKeyMethods.IKgenerate(
+                    user.user_id, message
+                )
             )
             text = texts.Bonus.Texts.click_scale_bonus.format(
                 hours=bonus.bonus_data.duration_hours, scale=bonus.bonus_data.value
@@ -200,6 +206,9 @@ class CreateBonusBoosters(BonusDopClass):
                 state_data.get("type_bonus"),
                 expires_at=str(await self.calculate_end_time(expires_at_hours)),
                 duration_hours=expires_at_hours,
+                idempotency_key=await IdempotencyKeyMethods.IKgenerate(
+                    user.user_id, message
+                )
             )
             text = texts.Bonus.Texts.energy_renewal_bonus.format(
                 hours=bonus.bonus_data.duration_hours
@@ -229,7 +238,13 @@ class ActivateBonusBoosters:
         Проверяем и получаем бонус
         """
         async with base_lock:  # TODO перекинуть на сторону сервера блокировку
-            result = await BonusesMethods().claim_bonus(user, bonus_id)
+            result = await BonusesMethods().claim_bonus(
+                user,
+                bonus_id,
+                idempotency_key=await IdempotencyKeyMethods.IKgenerate(
+                    user.user_id, call.message
+                )
+            )
             if (
                 result
                 and isinstance(result, dict)
@@ -253,7 +268,7 @@ class ActivateBonusBoosters:
                     )
 
                 await call.answer(text=text, show_alert=True)
-            except:
+            except: # exceptions.TelegramBadRequest
                 await call.message.bot.send_message(chat_id=user.user_id, text=text)
 
             await call.message.delete()

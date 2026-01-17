@@ -290,6 +290,8 @@ class Purchases(BaseModel):
     delivery_data = models.TextField(
         blank=True, null=True, verbose_name="Данные для выдачи"
     )
+    product_ids = models.JSONField(default=list)
+    
     message_id = models.BigIntegerField(
         null=True, verbose_name="ID сообщения"
     )

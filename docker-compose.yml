@@ -1,0 +1,278 @@
+services:
+  redis:
+    user: root  # ← запускать от root
+    privileged: true  # ← полные привилегии (если нужно)
+    image: redis:latest
+    ports:
+      - "6379:6379"
+    networks:
+      - app-network
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    # command: redis-server --requirepass ${REDIS_PASSWORD} --appendonly yes  # ← ПАРОЛЬ И СОХРАНЕНИЕ ДАННЫХ
+    command: 
+      - redis-server
+      - --appendfsync everysec  # вместо always
+      - --no-appendfsync-on-rewrite yes
+      - --auto-aof-rewrite-percentage 100
+      - --auto-aof-rewrite-min-size 64mb
+      - --requirepass ${REDIS_PASSWORD} # ← ПАРОЛЬ И СОХРАНЕНИЕ ДАННЫХ
+      - --save 900 1      # сохранять если 1 изменение за 15 мин
+      - --save 300 10     # сохранять если 10 изменений за 5 мин
+      - --save 60 10000   # сохранять если 10000 изменений за 1 мин
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD}  # для удобства, если будут другие сервисы
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 20s  # Ждем инициализации
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: rabbitmq
+    hostname: rabbitmq  # ← ДОБАВЬТЕ ЭТУ СТРОКУ
+    ports:
+      - "${RABBITMQ_PORT}:${RABBITMQ_PORT}"   # порт для приложений
+      - "15672:15672" # веб-интерфейс (логин: guest/guest)
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    networks:
+        - app-network
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "status"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 40s  # RabbitMQ долго стартует
+
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_HOST: ${POSTGRES_HOST}
+      POSTGRES_PORT: ${POSTGRES_PORT}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      # - ./backups:/backups  # для бэкапов
+    ports:
+      - "${POSTGRES_PORT}:${POSTGRES_PORT}"
+    networks:
+      - app-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  analytic_consumer:
+    privileged: true  # ← полные привилегии (если нужно)
+    build: ./Django
+    command: python manage.py start_analytics
+    volumes:
+      - ./Django:/Django
+    networks:
+      - app-network
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    environment:
+      RABBITMQ_HOST: ${RABBITMQ_HOST}
+      RABBITMQ_PORT: ${RABBITMQ_PORT}
+      RABBITMQ_USER: ${RABBITMQ_USER}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD}
+      ALLOWED_HOSTS: ${ALLOWED_HOSTS}
+      REDIS_URL: ${REDIS_URL}
+      SECRET_KEY: ${SECRET_KEY}
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_HOST: ${POSTGRES_HOST}
+      POSTGRES_PORT: ${POSTGRES_PORT}
+      DEBUG: True
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import psycopg2; conn = psycopg2.connect('postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}'); conn.close()"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  django:
+    privileged: true  # ← полные привилегии (если нужно)
+    build: ./Django
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./Django:/Django
+      - django_static:/Django/static  # для статики
+    networks:
+      - app-network
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    environment:
+        ALLOWED_HOSTS: ${ALLOWED_HOSTS}
+        REDIS_URL: ${REDIS_URL}
+        SECRET_KEY: ${SECRET_KEY}
+        DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}
+        POSTGRES_DB: ${POSTGRES_DB}
+        POSTGRES_USER: ${POSTGRES_USER}
+        POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+        POSTGRES_HOST: ${POSTGRES_HOST}
+        POSTGRES_PORT: ${POSTGRES_PORT}
+        DEBUG: ${DEBUG}
+    restart: unless-stopped
+
+  main_bot:
+    user: root  # ← запускать от root
+    privileged: true  # ← полные привилегии (если нужно)  
+    build:
+      context: ./TGBot
+      target: main-bot
+    volumes:
+      - ./TGBot:/TGBot
+    networks:
+      - app-network
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      django:
+        condition: service_started
+      analytic_consumer:
+        condition: service_started
+    environment:
+      RABBITMQ_HOST: ${RABBITMQ_HOST}
+      RABBITMQ_PORT: ${RABBITMQ_PORT}
+      RABBITMQ_USER: ${RABBITMQ_USER}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD}
+      DJANGO_API_LINK: django:8000
+      FAST_API_LINK: notification:7000
+      REDIS_URL: ${REDIS_URL}
+      MAIN_TEST_TOKEN: ${MAIN_TEST_TOKEN}
+      MAIN_BASE_TOKEN: ${MAIN_BASE_TOKEN}
+      BOT_NAME: ${BOT_NAME}
+      PHOTO_ID: ${PHOTO_ID}
+      DEBUG: ${DEBUG}
+    restart: unless-stopped
+
+  gpt_bot:
+    user: root  # ← запускать от root
+    privileged: true  # ← полные привилегии (если нужно)  
+    build:
+      context: ./TGBot
+      target: gpt-bot
+    volumes:
+      - ./TGBot:/TGBot
+    networks:
+      - app-network
+    depends_on:
+      redis:
+        condition: service_healthy
+      django:
+        condition: service_started
+    environment:
+      DJANGO_API_LINK: django:8000
+      FAST_API_LINK: notification:7000
+      REDIS_URL: ${REDIS_URL}
+      MAIN_TEST_TOKEN: ${MAIN_TEST_TOKEN}
+      MAIN_BASE_TOKEN: ${MAIN_BASE_TOKEN}
+      GPTBOT_TEST_TOKEN: ${GPTBOT_TEST_TOKEN}
+      GPTBOT_BASE_TOKEN: ${GPTBOT_BASE_TOKEN}
+      DEBUG: ${DEBUG}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      OPENAI_PROXY: ${OPENAI_PROXY}
+    restart: unless-stopped
+
+  backup_consumer:
+    user: root  # ← запускать от root
+    privileged: true  # ← полные привилегии (если нужно)  
+    build: ./Consumers
+    networks:
+      - app-network
+    volumes:
+      - ./Consumers:/Consumers
+    environment:
+      RABBITMQ_HOST: ${RABBITMQ_HOST}
+      RABBITMQ_PORT: ${RABBITMQ_PORT}
+      RABBITMQ_USER: ${RABBITMQ_USER}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD}
+      TEST_TOKEN: ${SERVICE_TEST_TOKEN}
+      TOKEN: ${SERVICE_BASE_TOKEN}
+      DEBUG: ${DEBUG}
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    restart: unless-stopped
+
+  celery_worker:
+    user: root  # ← запускать от root
+    privileged: true  # ← полные привилегии (если нужно)  
+    build: ./Celery
+    command: celery -A main worker -Q aggregation_pipeline -l info  # Указываем очередь copy_base,continue_registration,quest_attempts,aggregation_pipeline
+    volumes:
+      - ./Celery:/Celery
+    networks:
+      - app-network
+    depends_on:
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      DJANGO_API_LINK: django:8000
+      REDIS_URL: ${REDIS_URL}
+      RABBITMQ_HOST: ${RABBITMQ_HOST}
+      RABBITMQ_PORT: ${RABBITMQ_PORT}
+      RABBITMQ_USER: ${RABBITMQ_USER}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD}
+      DEBUG: ${DEBUG}
+    restart: unless-stopped
+
+  celery_beat:
+    user: root  # ← запускать от root
+    privileged: true  # ← полные привилегии (если нужно)  
+    build: ./Celery
+    command: celery -A main beat -l info  # Запуск планировщика
+    volumes:
+      - ./Celery:/Celery
+    networks:
+      - app-network
+    depends_on:
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      DJANGO_API_LINK: django:8000
+      FAST_API_LINK: notification:7000
+      REDIS_URL: ${REDIS_URL}
+      DEBUG: ${DEBUG}
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+  django_static:
+  rabbitmq_data:
+
+networks:
+  app-network:
+    driver: bridge

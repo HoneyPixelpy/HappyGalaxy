@@ -76,14 +76,14 @@ class KB:
 
     @classmethod
     async def main_menu(cls, user: Users) -> types.ReplyKeyboardMarkup:
+        from MainBot.utils.Forms import FamilyTies
         keyboard = []
 
-        if user.role_private in [
-            "parent",
-            "child",
-        ] or await Lumberjack_GameMethods().get_max_energy(
-            user
-        ):  # Это в основном для того чтобы работник не попал в игру (можно изменить логику)
+        if (
+            FamilyTies(user.role_private).need or 
+            await Lumberjack_GameMethods().get_max_energy(user)
+            ):
+            # Это в основном для того чтобы работник не попал в игру (можно изменить логику)
             keyboard.append([types.KeyboardButton(text=texts.Btns.game)])
 
         keyboard.append([types.KeyboardButton(text=texts.Btns.quests)])

@@ -1,12 +1,12 @@
 from datetime import datetime
-from typing import List, Optional
+from typing import List
 
 import texts as tx
 from aiogram import types
-from loguru import logger
 from MainBot.base.models import Rangs, Users
 from MainBot.base.orm_requests import RangsMethods
-from MainBot.keyboards.inline import IKB as inline
+from MainBot.utils.MyModule.message import MessageManager
+from MainBot.keyboards import inline
 
 
 class Season:
@@ -17,7 +17,7 @@ class Season:
         """
         try:
             return await RangsMethods().get_by_role(user.role_private)
-        except:
+        except: # Safe
             return [
                 Rangs(
                     created_at=datetime.now(),
@@ -46,29 +46,10 @@ class Season:
         else:
             return user_data
 
-    async def get_upgrade_msg(
+    async def text(
         self,
-        message: types.Message,
         user: Users,
-    ) -> None:
-        """
-        Показываем список с улучшениями
-        """
-        try:
-            await message.bot.delete_message(
-                chat_id=user.user_id,
-                message_id=int(message.text[7:].replace("upgrade_list_", "")),
-            )
-        except:
-            pass
-        # try:
-        #     await message.bot.delete_message(
-        #         chat_id=user.user_id,
-        #         message_id=int(message.text[7:].replace("upgrade_list_", "")) + 1
-        #         )
-        # except:
-        #     pass
-        await message.delete()
+    ) -> str:
         season_data = await self.get_upgrade_list(user)
 
         text = "<b>"
@@ -98,7 +79,71 @@ class Season:
                 ),
             )
         text += "</b>"
+        return text
 
-        await message.bot.send_message(
-            chat_id=user.user_id, text=text, reply_markup=await inline.back_to_profile()
+    async def keyboard(
+        self
+    ) -> None:
+        return types.InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    types.InlineKeyboardButton(
+                        text=tx.Btns.back, callback_data="main_menu|back"
+                    )
+                ]
+            ]
         )
+
+    async def edit_upgrade_msg(
+        self,
+        call: types.CallbackQuery,
+        user: Users,
+    ) -> None:
+        """
+        Показываем список с улучшениями
+        """        
+        text = await self.text(user)
+
+        await MessageManager(
+            call,
+            user.user_id
+        ).send_or_edit(
+            text,
+            await self.keyboard(),
+            "rang"
+        )
+
+    async def get_upgrade_msg(
+        self,
+        message: types.Message,
+        user: Users,
+    ) -> None:
+        """
+        Показываем список с улучшениями
+        """
+        try:
+            await message.bot.delete_message(
+                chat_id=user.user_id,
+                message_id=int(message.text[7:].replace("upgrade_list_", "")) + 1
+            )
+        except: # exceptions.TelegramBadRequest
+            pass
+
+        await message.delete()
+        
+        text = await self.text(user)
+
+        await MessageManager(
+            message,
+            user.user_id
+        ).send_or_edit(
+            text,
+            await inline.back_to_profile(),
+            "rang"
+        )
+
+        # await message.bot.send_message(
+        #     chat_id=user.user_id,
+        #     text=text,
+        #     reply_markup=await self.keyboard()
+        # )

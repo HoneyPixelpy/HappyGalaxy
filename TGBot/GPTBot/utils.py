@@ -65,7 +65,7 @@ async def check_tg_invite(user_id):
             return is_subscribed
 
         except Exception as e:
-            print(f"Error checking subscription: {e}")
+            logger.error(f"Error checking subscription: {e}")
             return user_data["privilege"].get("is_subscribed", False)
     else:
         return user_data["privilege"].get("is_subscribed", False)

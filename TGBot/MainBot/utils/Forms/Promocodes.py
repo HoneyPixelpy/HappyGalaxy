@@ -1,26 +1,11 @@
-import asyncio
-import json
-import math
-import random
-from collections import namedtuple
-from datetime import datetime
-from typing import Optional, Tuple, Union
-
-import config
-import pytz
 import texts
-from aiogram import Bot, types
+from aiogram import types
 from aiogram.fsm.context import FSMContext
-from config import debug
-from loguru import logger
-from MainBot.base.models import DailyQuests, IdeaQuests, Quests, SubscribeQuest, Users
-from MainBot.base.orm_requests import PromocodesMethods
-from MainBot.keyboards.inline import IKB as inline
-from MainBot.keyboards.reply import KB as reply
-from MainBot.state.state import Daily, Idea, SPromocodes
-from MainBot.utils.errors import ListLengthChangedError, NoDesiredTypeError
+from MainBot.base.models import Users
+from MainBot.base.orm_requests import PromocodesMethods, IdempotencyKeyMethods
+from MainBot.keyboards import reply, selector
+from MainBot.state.state import SPromocodes
 from MainBot.utils.MyModule import Func
-from Redis.aggregator import QuestAggregator
 
 
 class Promocodes:
@@ -48,7 +33,14 @@ class Promocodes:
     async def activate(
         self, message: types.Message, state: FSMContext, user: Users
     ) -> None:
-        promocode = await PromocodesMethods().activate(user.id, message.text)
+        promocode = await PromocodesMethods().activate(
+            user.id,
+            message.text,
+            idempotency_key=await IdempotencyKeyMethods.IKgenerate(
+                user.user_id,
+                message
+            )
+        )
         if isinstance(promocode, str):
             if promocode == "server_error":
                 await Func.send_error_to_developer(
@@ -75,7 +67,7 @@ class Promocodes:
             await message.bot.send_message(
                 chat_id=user.user_id,
                 text=text,
-                reply_markup=await reply.main_menu(user),
+                reply_markup=await selector.main_menu(user),
                 disable_web_page_preview=True,
             )
             await message.delete()

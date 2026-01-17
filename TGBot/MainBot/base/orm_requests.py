@@ -1,8 +1,8 @@
 from datetime import datetime, timedelta
+import hashlib
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 from aiogram import types
-from loguru import logger
 
 from .api_client import (
     BonusesRequests,
@@ -18,8 +18,8 @@ from .api_client import (
     PurchasesRequests,
     QuestsRequests,
     RangsRequests,
+    RatingRequests,
     Sigma_BoostsRequests,
-    UseBonusesRequests,
     UseQuestsRequests,
     UsersRequests,
     Work_KeysRequests,
@@ -31,7 +31,6 @@ from .models import (
     IdeaQuests,
     InteractiveGameAllInfo,
     InteractiveGameBase,
-    InteractiveGameData,
     InteractiveGameInfo,
     Lumberjack_Game,
     Pikmi_Shop,
@@ -42,10 +41,32 @@ from .models import (
     Sigma_Boosts,
     StarcoinsPromo,
     SubscribeQuest,
-    UseBonuses,
+    # UseBonuses,
     Users,
     Work_Keys,
 )
+
+
+class IdempotencyKeyMethods:
+    @classmethod
+    async def IKgenerate(
+        cls,
+        user_id: int,
+        message: types.Message
+    ) -> str:
+        created = message.date.timestamp()
+        
+        if message.edit_date is not None:
+            data_str = f"{message.edit_date}:{created}:{user_id}"
+        else:
+            # Если edit_date нет, используем 0 как placeholder
+            data_str = f"0:{created}:{user_id}"
+        
+        # Создаем MD5 хэш (16 байт) и берем первые 12 символов
+        hash_obj = hashlib.md5(data_str.encode())
+        _hash = hash_obj.hexdigest()
+        
+        return _hash
 
 
 class DataMethods:
@@ -69,7 +90,7 @@ class UserMethods:
         return Users(**data) if data else None
 
     async def create(
-        self, user_data: types.User, referral_user_id: Optional[int]
+        self, user_data: types.User, referral_user_id: Optional[int], idempotency_key: str
     ) -> Optional[Users]:
         data = await self.api.create_user(
             user_data={
@@ -78,7 +99,8 @@ class UserMethods:
                 "tg_last_name": user_data.last_name,
                 "tg_username": user_data.username,
                 "referral_user_id": referral_user_id,
-            }
+            },
+            idempotency_key=idempotency_key
         )
         return Users(**data) if data else None
 
@@ -96,19 +118,6 @@ class UserMethods:
     async def check_phone(self, phone: str) -> Optional[Users]:
         data = await self.api.check_phone(phone)
         return Users(**data) if data else None
-
-    # async def check_fio(
-    #     self,
-    #     last_name: str,
-    #     first_name: str,
-    #     middle_name: str
-    #     ) -> Optional[Users]:
-    #     data = await self.api.check_fio(
-    #         last_name=last_name,
-    #         first_name=first_name,
-    #         middle_name=middle_name
-    #     )
-    #     return Users(**data) if data else None
 
     async def check_nickname(self, nickname: str) -> Optional[Users]:
         data = await self.api.check_nickname(nickname)
@@ -182,10 +191,11 @@ class Family_TiesMethods:
         self,
         from_user: Users,
         to_user: Users,
-        # relationship_type: str, # parent_child или spouse
+        idempotency_key: str
     ) -> Family_Ties:
         data = await self.api.create_family(
-            user_data={"from_user": from_user.user_id, "to_user": to_user.user_id}
+            user_data={"from_user": from_user.user_id, "to_user": to_user.user_id},
+            idempotency_key=idempotency_key
         )
         return Family_Ties(**data) if data else None
 
@@ -196,7 +206,14 @@ class PurchasesMethods:
         self.api = PurchasesRequests()
 
     async def create(
-        self, user: Users, title: str, description: str, cost: int, product_id: int, delivery_data: Optional[str] = None
+        self,
+        user: Users,
+        title: str,
+        description: str,
+        cost: int,
+        product_id: int,
+        delivery_data: Optional[str] = None,
+        idempotency_key: Optional[str] = None
     ) -> Optional[Purchases]:
         data = await self.api.create_purch(
             user_data={
@@ -206,7 +223,8 @@ class PurchasesMethods:
                 "cost": cost,
                 "product_id": product_id,
                 "delivery_data": delivery_data
-            }
+            },
+            idempotency_key=idempotency_key
         )
         return Purchases(**data) if data else None
 
@@ -245,10 +263,31 @@ class PurchasesMethods:
             )
         return Purchases(**data) if data else None
 
-    async def answer_buy(self, answer_message_id: int) -> int:
-        return await self.api.answer_buy(
+    async def answer_buy(self, answer_message_id: int) -> Optional[Purchases]:
+        data = await self.api.answer_buy(
             params={"answer_message_id": answer_message_id}
             )
+        return Purchases(**data) if data else None
+
+    async def product_message_id(self, answer_message_id: int, msg_ids: list[int]) -> None:
+        await self.api.product_message_id(
+            user_data={
+                "answer_message_id": answer_message_id,
+                "msg_ids": msg_ids
+                }
+            )
+
+    async def rollback_buy(self, purchases_id: int) -> Optional[Tuple[Purchases,Pikmi_Shop]]:
+        data = await self.api.rollback_buy(
+            user_data={"purchases_id": purchases_id}
+            )
+        if not data:
+            return None, None
+        else:
+            return (
+                Purchases(**data['purchase']),
+                Pikmi_Shop(**data['product'])
+                )
 
 
 class Pikmi_ShopMethods:
@@ -406,7 +445,8 @@ class BonusesMethods:
         expires_at: str = None,
         value: Optional[Any] = None,
         max_quantity: Optional[Any] = None,
-        duration_hours: Optional[Any] = None
+        duration_hours: Optional[Any] = None,
+        idempotency_key: str
     ) -> Bonuses:
         data = await self.api.create_bonus(
             user_data={
@@ -415,7 +455,8 @@ class BonusesMethods:
                 "value": value,
                 "max_quantity": max_quantity,
                 "duration_hours": duration_hours,
-            }
+            },
+            idempotency_key=idempotency_key
         )
         return Bonuses(**data) if data else None
 
@@ -423,26 +464,28 @@ class BonusesMethods:
         data = await self.api.get_by_id(bonus_id)
         return Bonuses(**data) if data else None
 
-    async def claim_bonus(self, user: Users, bonus_id: int) -> Dict:
+    async def claim_bonus(self, user: Users, bonus_id: int, idempotency_key: str) -> Dict:
         return await self.api.claim_bonus(
-            user_data={"user_id": user.id, "bonus_id": bonus_id}
+            user_data={"user_id": user.id, "bonus_id": bonus_id},
+            idempotency_key=idempotency_key
         )
 
 
-class UseBonusesMethods:
+# class UseBonusesMethods:
 
-    def __init__(self):
-        self.api = UseBonusesRequests()
+#     def __init__(self):
+#         self.api = UseBonusesRequests()
 
-    async def create_bonus(self, user: Users, bonus: Bonuses) -> UseBonuses:
-        data = await self.api.create_bonus(
-            user_data={"user_id": user.id, "bonus_id": bonus.id}
-        )
-        return UseBonuses(**data) if data else None
+#     async def create_bonus(self, user: Users, bonus: Bonuses, idempotency_key: str) -> UseBonuses:
+#         data = await self.api.create_bonus(
+#             user_data={"user_id": user.id, "bonus_id": bonus.id},
+#             idempotency_key=idempotency_key
+#         )
+#         return UseBonuses(**data) if data else None
 
-    async def get_connection(self, user: Users, bonus: Bonuses) -> Optional[UseBonuses]:
-        data = await self.api.get_connection(user_id=user.id, bonus_id=bonus.id)
-        return UseBonuses(**data) if data else None
+#     async def get_connection(self, user: Users, bonus: Bonuses) -> Optional[UseBonuses]:
+#         data = await self.api.get_connection(user_id=user.id, bonus_id=bonus.id)
+#         return UseBonuses(**data) if data else None
 
 
 class QuestsMethods:
@@ -469,10 +512,11 @@ class UseQuestsMethods:
         self.api = UseQuestsRequests()
 
     async def create_quest(
-        self, user: Users, quest: Quests
+        self, user: Users, quest: Quests, idempotency_key: str
     ) -> Union[SubscribeQuest, IdeaQuests]:
         data = await self.api.create_quest(
-            user_data={"user_id": user.id, "quest_id": quest.id}
+            user_data={"user_id": user.id, "quest_id": quest.id},
+            idempotency_key=idempotency_key
         )
         if quest.type_quest == "subscribe":
             return SubscribeQuest(**data) if data else None
@@ -496,10 +540,11 @@ class UseQuestsMethods:
         )
 
     async def create_idea_daily(
-        self, user_id: int, quest_id: int
+        self, user_id: int, quest_id: int, idempotency_key: str
     ) -> Optional[Union[bool, float]]:
         return await self.api.create_idea_daily(
-            user_data={"user_id": user_id, "quest_id": quest_id}
+            user_data={"user_id": user_id, "quest_id": quest_id},
+            idempotency_key=idempotency_key
         )
 
     async def success_idea_daily(self, user: Users, quest_id: int) -> Union[float, int]:
@@ -544,8 +589,8 @@ class PromocodesMethods:
     def __init__(self):
         self.api = PromocodesRequests()
 
-    async def activate(self, user_id: int, code: str) -> Union[StarcoinsPromo, str]:
-        data = await self.api.activate(user_id, code)
+    async def activate(self, user_id: int, code: str, idempotency_key: str) -> Union[StarcoinsPromo, str]:
+        data = await self.api.activate(user_id, code, idempotency_key)
 
         if data:
             if data.get("data"):
@@ -566,8 +611,8 @@ class ManagementLinksMethods:
     def __init__(self):
         self.api = ManagementLinksRequests()
 
-    async def activate(self, user_id: int, utm: str) -> Optional[bool]:
-        return await self.api.activate(user_id, utm)
+    async def activate(self, user_id: int, utm: str, idempotency_key: str) -> Optional[bool]:
+        return await self.api.activate(user_id, utm, idempotency_key)
 
 
 class InteractiveGameMethods:
@@ -614,3 +659,28 @@ class InteractiveGameMethods:
     ) -> Optional[InteractiveGameAllInfo]:
         game = await self.api.end_game(game_id, data={"winers": winers})
         return InteractiveGameAllInfo(**game) if game else None
+
+
+class RatingMethods:
+
+    def __init__(self):
+        self.api = RatingRequests()
+
+    async def daily_login(self, user_id: int) -> Optional[Dict]:
+        return await self.api.daily_login(user_id)
+
+    async def collect_starcoins(self, user_id: int) -> Optional[Dict]:
+        return await self.api.collect_starcoins(user_id)
+
+    async def guess_country(self, user_id: int) -> Optional[Dict]:
+        return await self.api.guess_country(user_id)
+
+    async def make_clicks(self, user_id: int) -> Optional[Dict]:
+        return await self.api.make_clicks(user_id)
+
+    async def completed_quests(self, user_id: int) -> Optional[Dict]:
+        return await self.api.completed_quests(user_id)
+
+    async def invited_friends(self, user_id: int) -> Optional[Dict]:
+        return await self.api.invited_friends(user_id)
+

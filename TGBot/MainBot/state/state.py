@@ -49,6 +49,7 @@ class CreateBonus(StatesGroup):
 class Offer(StatesGroup):
     shop = State()
     instruction = State()
+    confirm = State()
 
 
 class VKProfile(StatesGroup):

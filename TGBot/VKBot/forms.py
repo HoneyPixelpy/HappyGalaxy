@@ -4,7 +4,7 @@ import texts
 from aiogram import types
 from aiogram.fsm.context import FSMContext
 from loguru import logger
-from MainBot.keyboards.reply import KB as reply
+from MainBot.keyboards import reply
 from MainBot.state.state import VKProfile
 
 from .api import VKGroup

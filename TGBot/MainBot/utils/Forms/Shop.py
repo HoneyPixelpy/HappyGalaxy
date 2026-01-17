@@ -4,19 +4,22 @@ from typing import Optional, Tuple, Union
 from collections import namedtuple
 
 import pytz
+from Redis.aggregator import ShopAggregator
 import texts
-from aiogram import types
+from aiogram import types, exceptions
 from aiogram.fsm.context import FSMContext
-from config import debug, log_chat, shop_chat
+from config import debug, hg_chat, shop_chat
 from loguru import logger
 from MainBot.base.models import Pikmi_Shop, Users
-from MainBot.base.orm_requests import Pikmi_ShopMethods, PurchasesMethods, UserMethods
-from MainBot.keyboards.inline import IKB as inline
-from MainBot.keyboards.reply import KB as reply
+from MainBot.base.orm_requests import IdempotencyKeyMethods, Pikmi_ShopMethods, PurchasesMethods, UserMethods
+from MainBot.keyboards import inline, selector
 from MainBot.state.state import Offer
 from MainBot.utils.MyModule import Func
+from MainBot.utils.MyModule.message import MessageManager
 from MainBot.utils.Rabbitmq import RabbitMQ
+from MainBot.utils.errors import ListLengthChangedError
 from Redis.main import RedisManager
+from MainBot.utils.Forms.Menu import Menu
 
 
 class ShopPagination:
@@ -36,7 +39,7 @@ class ShopPagination:
 
         except (ValueError, TypeError):
             return 1
-        except Exception as e:
+        except Exception as e: # Redis
             logger.error(f"Redis error in get_page_number: {e}")
             return 1
 
@@ -49,7 +52,7 @@ class ShopPagination:
             # Устанавливаем на 1 час (3600 сек)
             await redis_client.setex(key, 3600, pagination)
 
-        except Exception as e:
+        except Exception as e: # Redis
             logger.error(f"Redis error in set_page_number: {e}")
 
 
@@ -106,7 +109,7 @@ class Shop(ShopPagination):
                         texts.Shop.Error.no_products,
                     )
                     await call.message.delete()
-                except:
+                except: # exceptions.TelegramBadRequest
                     pass
             return
 
@@ -131,23 +134,19 @@ class Shop(ShopPagination):
         keyboard.inline_keyboard.append(
             [
                 types.InlineKeyboardButton(
-                    text=texts.Btns.back, callback_data="back_to_profile"
+                    text=texts.Btns.back, callback_data="main_menu|back"
                 )
             ]
         )
 
-        if message:
-            await message.bot.send_message(
-                chat_id=user.user_id, text=text, reply_markup=keyboard
-            )
-        else:
-            try:
-                await call.message.edit_text(text=text, reply_markup=keyboard)
-            except:
-                await call.message.bot.send_message(
-                    chat_id=user.user_id, text=text, reply_markup=keyboard
-                )
-                await call.message.delete()
+        await MessageManager(
+            call if call else message,
+            user.user_id
+        ).send_or_edit(
+            text,
+            keyboard,
+            "shop"
+        )
 
     async def get_product(
         self, message: types.Message, user: Users, product_id: int
@@ -161,7 +160,7 @@ class Shop(ShopPagination):
             await message.bot.send_message(
                 chat_id=user.user_id,
                 text=texts.Shop.Error.no_product,
-                reply_markup=await reply.main_menu(user),
+                reply_markup=await selector.main_menu(user),
             )
         else:
             text = texts.Shop.Texts.product.format(
@@ -170,23 +169,18 @@ class Shop(ShopPagination):
                 price=product.price,
                 quantity=product.quantity,
             )
-            try:
-                await message.edit_text(
-                    text=text, reply_markup=await inline.buy_product(
-                        product.id,
-                        "1" if product.delivery_instructions else ""
-                        )
-                )
-            except:
-                await message.bot.send_message(
-                    chat_id=user.user_id,
-                    text=text,
-                    reply_markup=await inline.buy_product(
-                        product.id,
-                        "1" if product.delivery_instructions else ""
-                        )
-                )
-                await message.delete()
+            
+            await MessageManager(
+                message,
+                user.user_id
+            ).send_or_edit(
+                text,
+                await inline.buy_product(
+                    product.id,
+                    "1" if product.delivery_instructions else ""
+                ),
+                "shop"
+            )
 
     async def check_possibility_purchase(
         self, user: Users, product_id: int
@@ -212,7 +206,8 @@ class Shop(ShopPagination):
         message: types.Message,
         user: Users,
         product: Pikmi_Shop,
-        delivery_data: Optional[str] = None
+        instructions: Optional[str] = None,
+        delivery_data: Optional[str] = None,
     ) -> None:
         """
         Покупка товара
@@ -223,21 +218,25 @@ class Shop(ShopPagination):
             description=product.description,
             cost=product.price,
             product_id=product.id,
-            delivery_data=delivery_data
+            delivery_data=delivery_data,
+            idempotency_key=await IdempotencyKeyMethods.IKgenerate(
+                user.user_id,
+                message
+            )
         )
         if purchases:
             await message.delete()
             
             user_text = texts.Shop.Texts.buy_head.format(
-                    title=product.title, description=product.description
+                    title=product.title
                 )
             if not delivery_data:
-                user_text += texts.Shop.Texts.buy_no_delivery_data
+                user_text += texts.Shop.Texts.buy_no_delivery_data.format(
+                    description=product.description
+                )
                 keyboard = None
             else:
-                user_text += texts.Shop.Texts.buy_delivery_data.format(
-                    delivery_data=delivery_data
-                )
+                user_text += texts.Shop.Texts.buy_delivery_data
                 keyboard = await inline.success_buy(purchases_id=purchases.id)
             
             await message.bot.send_message(
@@ -245,37 +244,51 @@ class Shop(ShopPagination):
                 text=user_text
             )
 
+            text=texts.Shop.Texts.log_buy.format(
+                tg_info=await Func.format_tg_info(user.user_id, user.tg_username),
+                title_product=product.title,
+                description=product.description,
+                starcoins=product.price,
+                quantity=product.quantity,
+                role=user.role_name,
+                gender=await Func.gender_name(user.gender, user.role_private),
+                age=(datetime.now(pytz.timezone("Europe/Moscow")) - user.age).days
+                // 365,
+                title="Имя" if user.role_private == "child" else "ФИО",
+                supername=user.supername,
+                name=user.name,
+                nickname=user.nickname,
+                phone=user.phone,
+                created_at=await Func.format_date(user.created_at),
+                referral_count=await UserMethods().get_referral_count(user.user_id)
+            )
+            
+            if instructions and delivery_data:
+                if "@" not in delivery_data:
+                    delivery_data = "<code>" + delivery_data + "</code>"
+                text += texts.Shop.Texts.log_buy_delivery_data.format(
+                    instructions=instructions,
+                    delivery_data=delivery_data
+                )
+            
             log_msg = await message.bot.send_message(
                 chat_id=shop_chat,
-                text=texts.Shop.Texts.log_buy.format(
-                    tg_info=await Func.format_tg_info(user.user_id, user.tg_username),
-                    title_product=product.title,
-                    description=product.description,
-                    starcoins=product.price,
-                    quantity=product.quantity,
-                    delivery_data=delivery_data if delivery_data else "Нет",
-                    role=user.role_name,
-                    gender=await Func.gender_name(user.gender, user.role_private),
-                    age=(datetime.now(pytz.timezone("Europe/Moscow")) - user.age).days
-                    // 365,
-                    title="Имя" if user.role_private == "child" else "ФИО",
-                    supername=user.supername,
-                    name=user.name,
-                    nickname=user.nickname,
-                    phone=user.phone,
-                    created_at=await Func.format_date(user.created_at),
-                    referral_count=await UserMethods().get_referral_count(user.user_id),
-                ),
+                text=text,
                 reply_markup=keyboard
             )
-
+            
+            await Menu().main_menu(
+                message,
+                user
+            )
+            
             await RabbitMQ().track_shop(user.user_id, product.id)
             
-            await PurchasesMethods().add_message_id(purchases_id=purchases.id, message_id=log_msg.id)
+            await PurchasesMethods().add_message_id(purchases_id=purchases.id, message_id=log_msg.message_id)
         else:
             try:
                 await message.answer(texts.Shop.Error.no_product)
-            except:
+            except: # exceptions.TelegramBadRequest
                 await message.bot.send_message(
                     chat_id=user.user_id, text=texts.Shop.Error.no_product
                 )
@@ -286,12 +299,20 @@ class Shop(ShopPagination):
         """
         Предложение на отправку предложения.
         """
-        await call.message.bot.send_message(
-            chat_id=user.user_id,
-            text=texts.Shop.Texts.write_offer,
-            reply_markup=await reply.back(),
+        await MessageManager(
+            call,
+            user.user_id
+        ).send_or_edit(
+            texts.Shop.Texts.write_offer,
+            await inline.back("all_products"),
+            "shop"
         )
-        await call.message.delete()
+        # await call.message.bot.send_message(
+        #     chat_id=user.user_id,
+        #     text=texts.Shop.Texts.write_offer,
+        #     reply_markup=await reply.back(),
+        # )
+        # await call.message.delete()
         await state.set_state(Offer.shop)
 
     async def send_offer(
@@ -301,7 +322,7 @@ class Shop(ShopPagination):
         Отправляем предложение.
         """
         await message.bot.send_message(
-            chat_id=log_chat if log_chat else user.user_id,
+            chat_id=hg_chat if hg_chat else user.user_id,
             text=texts.Shop.Texts.log_offer.format(
                 tg_info=await Func.format_tg_info(user.user_id, user.tg_username),
                 role=user.role_name,
@@ -318,12 +339,20 @@ class Shop(ShopPagination):
                 offer=message.html_text,
             ),
         )
-        await message.bot.send_message(
-            chat_id=user.user_id,
-            text=texts.Shop.Texts.send_offer,
-            reply_markup=await reply.main_menu(user),
+        await MessageManager(
+            message,
+            user.user_id
+        ).send_or_edit(
+            texts.Shop.Texts.send_offer,
+            await selector.main_menu(user),
+            "menu"
         )
-        await message.delete()
+        # await message.bot.send_message(
+        #     chat_id=user.user_id,
+        #     text=texts.Shop.Texts.send_offer,
+        #     reply_markup=await selector.main_menu(user),
+        # )
+        # await message.delete()
         await state.clear()
 
     async def view_instructions(
@@ -333,20 +362,79 @@ class Shop(ShopPagination):
         Выдаем пользователю инструкцию к выдаче товара
         """
         product: Pikmi_Shop = await Pikmi_ShopMethods().get_by_id(product_id)
-        await call.bot.send_message(
-            chat_id=user.user_id,
-            text=texts.Shop.Texts.instructions.format(
+        if product.delivery_instructions:
+            await MessageManager(
+                call,
+                user.user_id
+            ).send_or_edit(
+                texts.Shop.Texts.instructions.format(
+                    title=product.title,
+                    instructions=product.delivery_instructions
+                ),
+                await inline.back(f"get_product|{product_id}"),
+                "shop"
+            )
+            # await call.bot.send_message(
+                
+            #     chat_id=user.user_id,
+            #     text=texts.Shop.Texts.instructions.format(
+            #         title=product.title,
+            #         instructions=product.delivery_instructions
+            #     ),
+            #     reply_markup=await inline.back(f"get_product|{product_id}")
+            # )
+            # await call.message.delete()
+            
+            await state.set_state(Offer.instruction)
+            await state.update_data(
+                message_id=call.message.message_id,
                 title=product.title,
-                instructions=product.instructions
-            ),
-            reply_markup=await reply.back()
+                product_id=product_id,
+                instructions=product.delivery_instructions
+            )
+        else:
+            await call.answer(
+                texts.Error.Notif.undefined_error,
+                show_alert=True
+            )
+
+    async def confirm_buy(
+        self, message: types.Message, state: FSMContext, user: Users, delivery_data: str
+    ) -> None:
+        """
+        Подтверждаем покупку.
+        """
+        data = await state.get_data()
+        
+        await state.set_state(Offer.confirm)
+        await state.update_data(
+            delivery_data=delivery_data
         )
         
-        await state.set_state(Offer.instruction)
-        await state.update_data(
-            product_id=product_id
-        )
-        await call.message.delete()
+        message_id = data.get("message_id")
+        if message_id:
+            try:
+                await message.bot.delete_message(
+                    chat_id=user.user_id,
+                    message_id=message_id
+                )
+            except: # exceptions.TelegramBadRequest
+                pass
+            await MessageManager(
+                message,
+                user.user_id
+            ).send_or_edit(
+                texts.Shop.Texts.confirm_buy.format(title=data["title"]),
+                await inline.confirm_buy(),
+                "shop"
+            )
+        
+        else:
+            await message.bot.send_message(
+                chat_id=user.user_id,
+                text=texts.Shop.Texts.confirm_buy.format(title=data["title"]),
+                reply_markup=await inline.confirm_buy()
+            )
 
     async def cancel_buy(
         self, call: types.CallbackQuery, user: Users, purchases_id: str
@@ -354,7 +442,7 @@ class Shop(ShopPagination):
         """
         Отменяем покупку.
         """
-        purchase = await PurchasesMethods().cancel_buy(user, purchases_id)
+        purchase = await PurchasesMethods().cancel_buy(purchases_id)
         if purchase:
             await call.message.bot.send_message(
                 chat_id=user.user_id,
@@ -364,9 +452,14 @@ class Shop(ShopPagination):
                 )
             )
             await call.answer(
-                texts.Shop.Admin.cancel_buy,
-                show_alert=True
+                texts.Shop.Admin.cancel_buy
             )
+            await call.message.react(
+                reaction=[
+                    types.ReactionTypeEmoji(emoji="👎")
+                ]
+            )
+            await call.message.delete_reply_markup()
         else:
             await call.answer(
                 texts.Error.Notif.undefined_error,
@@ -379,17 +472,30 @@ class Shop(ShopPagination):
         """
         Подтверждаем покупку.
         """
-        purchase = await PurchasesMethods().success_buy(user, purchases_id)
+        purchase = await PurchasesMethods().success_buy(purchases_id)
         if purchase:
-            await call.message.bot.send_message(
+            success_msg = await call.message.bot.send_message(
                 chat_id=user.user_id,
                 text=texts.Shop.Texts.success_buy.format(
                     title=purchase.title
                 )
             )
+            
+            await PurchasesMethods().product_message_id(
+                answer_message_id=call.message.message_id,
+                msg_ids=[success_msg.message_id]
+                )
+            
             await call.answer(
-                texts.Shop.Admin.success_buy,
-                show_alert=True
+                texts.Shop.Admin.success_buy
+            )
+            await call.message.react(
+                reaction=[
+                    types.ReactionTypeEmoji(emoji="❤️")
+                ]
+            )
+            await call.message.edit_reply_markup(
+                reply_markup=await inline.rollback_buy(purchase.id)
             )
         else:
             await call.answer(
@@ -398,49 +504,145 @@ class Shop(ShopPagination):
             )
 
     async def answer_buy(
-        self, message: types.Message, answer_message_id: int
+        self, message: types.Message, state: FSMContext, answer_message_id: int
     ) -> None:
         """
         Отвечаем на покупку.
         """
-        buyer_message_id = await PurchasesMethods().answer_buy(answer_message_id)
-        
-        if buyer_message_id:
-            # NOTE туту надо еще поработать с медиафайлами
-            text, content_type, media_content, media_group_id = \
-                await Func.parsing_message(message)
+        try:
+            purchase = await PurchasesMethods().answer_buy(answer_message_id)
             
-            if media_group_id:
+            if purchase:
+                """Отправляем сообщение пользователю"""
+                msg_datas = await ShopAggregator().add_message(
+                    message,
+                    state
+                )
+                
                 send_msg = await Func.constructor_func_to_mailing_msgs(
-                    bot=message.bot,
-                    text=text,
-                    media_type=content_type,
-                    media_content=media_content,
-                    media_group_id=media_group_id,
-                    pin_bool=False
+                    message.bot,
+                    msg_datas["text"],
+                    msg_datas["content_type"],
+                    msg_datas["media_content"],
+                    msg_datas["media_group_id"],
+                    False
                 )
+                
+                user = namedtuple('User', ['user_id'])
+                user.user_id = purchase.user.user_id
+                
+                msg_ids = await send_msg(user)
+                if not isinstance(msg_ids, list):
+                    msg_ids = [msg_ids]
+                
+                # await message.bot.send_message(
+                #     chat_id=shop_chat,
+                #     text=texts.Shop.Admin.answer_buy
+                # )
+                
+                success_msg = await message.bot.send_message(
+                    chat_id=user.user_id,
+                    text=texts.Shop.Texts.success_buy.format(
+                        title=purchase.title
+                    )
+                )
+                msg_ids.append(success_msg.message_id)
+                
+                await PurchasesMethods().product_message_id(
+                    answer_message_id=answer_message_id, msg_ids=msg_ids
+                    )
+                
+                """Ставим реакцию на заявку"""
+                await message.bot.set_message_reaction(
+                    chat_id=shop_chat,
+                    message_id=answer_message_id,
+                    reaction=[
+                        types.ReactionTypeEmoji(emoji="❤️")
+                    ]
+                )
+                
+                try:
+                    """Изменяем клаву на заявке"""
+                    await message.bot.edit_message_reply_markup(
+                        chat_id=shop_chat,
+                        message_id=answer_message_id,
+                        reply_markup=await inline.rollback_buy(purchase.id)
+                    )
+                except exceptions.TelegramBadRequest:
+                    pass
+                
             else:
-                send_msg = await Func.constructor_func_to_mailing_one_msg(
-                    bot=message.bot,
-                    media_content=media_content,
-                    media_type=content_type,
-                    pin_bool=False,
-                    text=text
+                await message.bot.send_message(
+                    chat_id=shop_chat,
+                    text=texts.Error.Notif.undefined_error
+                )
+        except ListLengthChangedError:
+            pass
+
+    async def rollback_buy(
+        self, call: types.CallbackQuery, user: Users, purchases_id: str
+    ) -> None:
+        """
+        Подтверждаем покупку.
+        """
+        purchases, product = await PurchasesMethods().rollback_buy(purchases_id)
+        logger.debug(purchases)
+        logger.debug(product)
+        if purchases:
+            try:
+                if purchases.product_ids:
+                    await call.message.bot.delete_messages(
+                        chat_id=purchases.user.user_id,
+                        message_ids=purchases.product_ids
+                    )
+                else:
+                    logger.warning(
+                        "Ошибка при удалении сообщения «{0}»".format(purchases.product_ids)
+                    )
+            except: # exceptions.TelegramBadRequest
+                logger.warning(
+                    "Ошибка при удалении сообщения «{0}»".format(purchases.product_ids)
                 )
             
-            user = namedtuple('User', ['user_id'])
-            user.user_id = buyer_message_id
-            
-            await send_msg(user)
-            
-            await message.answer(
-                chat_id=message.from_user.id,
-                text=texts.Shop.Admin.answer_buy
-            )
-        else:
-            await message.answer(
-                chat_id=message.from_user.id,
-                text=texts.Error.Notif.undefined_error
+            log_msg = await call.bot.send_message(
+                chat_id=shop_chat,
+                text=texts.Shop.Texts.log_buy.format(
+                    tg_info=await Func.format_tg_info(user.user_id, user.tg_username),
+                    title_product=product.title,
+                    description=product.description,
+                    starcoins=product.price,
+                    quantity=product.quantity,
+                    role=user.role_name,
+                    gender=await Func.gender_name(user.gender, user.role_private),
+                    age=(datetime.now(pytz.timezone("Europe/Moscow")) - user.age).days
+                    // 365,
+                    title="Имя" if user.role_private == "child" else "ФИО",
+                    supername=user.supername,
+                    name=user.name,
+                    nickname=user.nickname,
+                    phone=user.phone,
+                    created_at=await Func.format_date(user.created_at),
+                    referral_count=await UserMethods().get_referral_count(user.user_id),
+                    instructions=product.delivery_instructions if product.delivery_instructions else "",
+                    delivery_data=purchases.delivery_data if purchases.delivery_data else "",
+                ),
+                reply_markup=await inline.success_buy(purchases_id=purchases.id)
             )
 
-        
+            await PurchasesMethods().add_message_id(purchases_id=purchases.id, message_id=log_msg.message_id)
+
+            await call.answer(
+                texts.Shop.Admin.rollback_buy
+            )
+            await call.message.react(
+                reaction=[
+                    types.ReactionTypeEmoji(emoji="🍌")
+                ]
+            )
+            await call.message.delete_reply_markup()
+        else:
+            await call.answer(
+                texts.Error.Notif.undefined_error,
+                show_alert=True
+            )
+

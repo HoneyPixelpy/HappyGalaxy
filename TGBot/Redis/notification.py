@@ -7,7 +7,7 @@ import texts
 from aiogram import exceptions, types
 from loguru import logger
 from MainBot.config import bot
-from MainBot.keyboards.inline import IKB
+from MainBot.keyboards import inline
 from MainBot.utils.Rabbitmq import RabbitMQ
 from redis import Redis
 
@@ -34,9 +34,9 @@ async def handle_rang_notifications(*args, **kwargs) -> None:
 
             await asyncio.sleep(1)
 
-        except Exception as e:
+        except Exception as e: # exceptions.TelegramBadRequest
             logger.error(f"Error in rang notification handler: {e}")
-            await asyncio.sleep(5)
+            await asyncio.sleep(3)
 
 
 async def send_rang_upgrade_message(
@@ -54,10 +54,10 @@ async def send_rang_upgrade_message(
             )
 
         await bot.send_message(
-            chat_id=user_id, text=text, reply_markup=await IKB.new_rang(new_quests)
+            chat_id=user_id, text=text, reply_markup=await inline.new_rang(new_quests)
         )
 
-    except Exception as e:
+    except Exception as e: # exceptions.TelegramBadRequest
         logger.error(f"Failed to send rang upgrade message to {user_id}: {e}")
 
 
@@ -79,43 +79,39 @@ async def handle_continue_registration_mailing(*args, **kwargs) -> None:
                 await continue_registration_mailing(continue_registration["user_ids"])
             await asyncio.sleep(1)
 
-        except Exception as e:
+        except Exception as e: # Redis
             logger.error(f"Error in rang notification handler: {e}")
-            await asyncio.sleep(5)
+            await asyncio.sleep(3)
 
 
 async def continue_registration_mailing(
     user_ids: List[int],
 ) -> None:
     """Отправить сообщение о повышении ранга"""
-    try:
-        number = 0
+    number = 0
 
-        for user_id in user_ids:
-            try:
-                await bot.send_message(
-                    chat_id=user_id, text=texts.Profile.Texts.continue_registration
+    for user_id in user_ids:
+        try:
+            await bot.send_message(
+                chat_id=user_id, text=texts.Profile.Texts.continue_registration
+            )
+            number += 1
+            if number % 10 == 0:
+                logger.debug(
+                    f"Юзеров получило уже - {number} о предложении продолжить регистарцию"
                 )
-                number += 1
-                if number % 10 == 0:
-                    logger.debug(
-                        f"Юзеров получило уже - {number} о предложении продолжить регистарцию"
-                    )
-                await asyncio.sleep(0.3)
-            except exceptions.TelegramRetryAfter as ex:
-                logger.error(f"Сработало исключение!!!\n!!!{ex}")
-                # await asyncio.sleep(ex.retry_after)
-                continue
-            except Exception as ex:
-                logger.error(f"Сработало исключение!!!\n!!!{ex}")
-                continue
+            await asyncio.sleep(0.3)
+        except exceptions.TelegramRetryAfter as ex:
+            logger.error(f"Сработало исключение!!!\n!!!{ex}")
+            # await asyncio.sleep(ex.retry_after)
+            continue
+        except Exception as ex: # exceptions.TelegramBadRequest
+            logger.error(f"Сработало исключение!!!\n!!!{ex}")
+            continue
 
-        logger.info(
-            f"💡 РАССЫЛКА ВЫПОЛНЕНА 💡\nПредложение продолжить регистрацию получило: {number} /челбанов"
-        )
-
-    except Exception as e:
-        logger.error(f"Failed to send rang upgrade message to {user_id}: {e}")
+    logger.info(
+        f"💡 РАССЫЛКА ВЫПОЛНЕНА 💡\nПредложение продолжить регистрацию получило: {number} /челбанов"
+    )
 
 
 async def handle_auto_reject_old_quest_attempts(*args, **kwargs) -> None:
@@ -133,9 +129,9 @@ async def handle_auto_reject_old_quest_attempts(*args, **kwargs) -> None:
                 )
             await asyncio.sleep(1)
 
-        except Exception as e:
+        except Exception as e: # Redis
             logger.error(f"Error in rang notification handler: {e}")
-            await asyncio.sleep(5)
+            await asyncio.sleep(3)
 
 
 async def auto_reject_old_quest_attempts(
@@ -144,51 +140,46 @@ async def auto_reject_old_quest_attempts(
     """
     Отправить сообщение об отказе в апруве квеста
     """
-    try:
-        number = 0
+    number = 0
 
-        for mailing_data in mailing_datas:
-            await RabbitMQ().track_quest(  # NOTE в приоритете перекинуть работу с kafka на сторону django
-                mailing_data["user_id"],
-                mailing_data["quest_id"],
-                action="auto_rejected",
-            )
+    for mailing_data in mailing_datas:
+        await RabbitMQ().track_quest(  # NOTE в приоритете перекинуть работу с kafka на сторону django
+            mailing_data["user_id"],
+            mailing_data["quest_id"],
+            action="auto_rejected",
+        )
 
-            try:
-                await bot.send_message(
-                    chat_id=mailing_data["user_id"],
-                    text=texts.Quests.Texts.idea_deny.format(mailing_data["title"]),
-                    reply_markup=types.InlineKeyboardMarkup(
-                        inline_keyboard=[
-                            [
-                                types.InlineKeyboardButton(
-                                    text=texts.Quests.Btns.go_activate,
-                                    callback_data=f"get_quest|{mailing_data['type_quest']}|{mailing_data['quest_id']}",
-                                )
-                            ]
+        try:
+            await bot.send_message(
+                chat_id=mailing_data["user_id"],
+                text=texts.Quests.Texts.idea_deny.format(mailing_data["title"]),
+                reply_markup=types.InlineKeyboardMarkup(
+                    inline_keyboard=[
+                        [
+                            types.InlineKeyboardButton(
+                                text=texts.Quests.Btns.go_activate,
+                                callback_data=f"get_quest|{mailing_data['type_quest']}|{mailing_data['quest_id']}",
+                            )
                         ]
-                    ),
-                    disable_notification=True,
+                    ]
+                ),
+                disable_notification=True,
+            )
+            number += 1
+            if number % 10 == 0:
+                logger.debug(
+                    f"Юзеров получило уже - {number} о просроченном квесте"
                 )
-                number += 1
-                if number % 10 == 0:
-                    logger.debug(
-                        f"Юзеров получило уже - {number} о просроченном квесте"
-                    )
-                await asyncio.sleep(0.3)
-            except exceptions.TelegramRetryAfter as ex:
-                logger.error(f"Сработало исключение!!!\n!!!{ex}")
-                # await asyncio.sleep(ex.retry_after)
-                continue
-            except Exception as ex:
-                logger.exception(f"Сработало исключение!!!\n!!!{ex}")
-                continue
+            await asyncio.sleep(0.3)
+        except exceptions.TelegramRetryAfter as ex:
+            logger.error(f"Сработало исключение!!!\n!!!{ex}")
+            # await asyncio.sleep(ex.retry_after)
+            continue
+        except Exception as ex: # exceptions.TelegramBadRequest
+            logger.exception(f"Сработало исключение!!!\n!!!{ex}")
+            continue
 
-        logger.info(
-            f"💡 РАССЫЛКА ВЫПОЛНЕНА 💡\nО просроченном кве получило: {number} /челбанов"
-        )
+    logger.info(
+        f"💡 РАССЫЛКА ВЫПОЛНЕНА 💡\nО просроченном кве получило: {number} /челбанов"
+    )
 
-    except Exception as e:
-        logger.exception(
-            f"Failed to send auto reject old quest attempts message to: {e}"
-        )

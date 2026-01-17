@@ -40,12 +40,11 @@ class PurchasesMethods:
     def create(
         cls,
         user: Users,
-        product: Pikmi_Shop,
         title: str,
         description: str,
         cost: int,
         delivery_data: Optional[str] = None
-    ) -> Purchases:
+    ) -> PurchasesSerializer:
         if user.purch_ban:
             raise RaisesResponse(
                 data={"error": "You are banned from purchases"},
@@ -64,8 +63,7 @@ class PurchasesMethods:
         user.purchases += 1
         user.save()
 
-        product.quantity -= 1
-        product.save()
+        # return PurchasesSerializer(purchase).data
 
         raise RaisesResponse(
             data=PurchasesSerializer(purchase).data,
@@ -92,10 +90,6 @@ class PurchasesMethods:
     ) -> None:
         purchase.delete()
 
-        raise RaisesResponse(
-            status=status.HTTP_200_OK
-        )
-
     @classmethod
     def success(
         cls,
@@ -105,10 +99,6 @@ class PurchasesMethods:
             purchase.completed = True
             purchase.completed_at = datetime.now()
             purchase.save()
-        
-        raise RaisesResponse(
-            status=status.HTTP_200_OK
-        )
 
     @classmethod
     def user_purchases(cls, user: Users, completed: str) -> List[Purchases]:
@@ -129,17 +119,39 @@ class PurchasesMethods:
             data=PurchasesSerializer(purchase).data, status=status.HTTP_200_OK
         )
 
+    @classmethod
+    def product_message_ids(
+        cls, 
+        purchase: Purchases,
+        msg_ids: list[int]
+        ) -> Purchases:
+        purchase.product_ids.extend(msg_ids)
+        purchase.save()
+
+    @classmethod
+    def rollback_buy(
+        cls, 
+        purchase: Purchases
+        ) -> Purchases:
+        if purchase.completed:
+            purchase.completed = False
+            purchase.completed_at = None
+            purchase.save()
+
 
 class Pikmi_ShopMethods:
     @classmethod
     def get(
         cls,
         pk: Optional[int] = None,
-    ) -> Union[Pikmi_Shop, Response]:
+        title: Optional[str] = None,
+    ) -> Pikmi_Shop:
         """Получить товар"""
         try:
             if pk is not None:
                 return Pikmi_Shop.objects.get(pk=pk)
+            elif title is not None:
+                return Pikmi_Shop.objects.get(title=title)
         except Pikmi_Shop.DoesNotExist:
             raise RaisesResponse(
                 data={"error": "Pikmi_Shop not found"}, status=status.HTTP_404_NOT_FOUND
@@ -150,3 +162,11 @@ class Pikmi_ShopMethods:
         cls,
     ) -> List[Pikmi_Shop]:
         return Pikmi_Shop.objects.all()
+
+    @classmethod
+    def buy(
+        cls,
+        product: Pikmi_Shop
+    ) -> List[Pikmi_Shop]:
+        product.quantity -= 1
+        product.save()

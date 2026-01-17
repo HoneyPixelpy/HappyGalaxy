@@ -126,7 +126,7 @@ class Func:
             await bot.delete_message(
                 chat_id=user_id, message_id=notification_message_id
             )
-        except:
+        except: # exceptions.TelegramBadRequest
             logger.warning("Не смогли удалить сообщение")
 
     @classmethod
@@ -138,13 +138,12 @@ class Func:
         pin_bool: bool,
         text: str,
         reply_markup=None,
-    ) -> Coroutine[Any, Any, None]:
+    ) -> Coroutine[Any, Any, int]:
         """
         Собираем функцию для рассылки.
         """
         if media_type == "photo":
-
-            async def mailing_func(user: Users) -> None:
+            async def mailing_func(user: Users) -> int:
                 delete_msg_add = 1
                 text_parts = TextProcessor.prepare_text_parts(text)
                 mailing_message = await bot.send_photo(
@@ -155,7 +154,7 @@ class Func:
                 )
                 for part_text in text_parts:
                     if part_text or (part_text == text_parts[-1] and reply_markup):
-                        await bot.send_message(
+                        mailing_message = await bot.send_message(
                             chat_id=user.user_id,
                             text=part_text if part_text else "⬆️ Клавиатура ⬆️",
                             disable_web_page_preview=True,
@@ -168,11 +167,11 @@ class Func:
                     await cls.pin_msg_delete_notification(
                         bot, user.user_id, mailing_message.message_id, delete_msg_add
                     )
+                return mailing_message.message_id
 
             return mailing_func
         elif media_type == "animation":
-
-            async def mailing_func(user: Users) -> None:
+            async def mailing_func(user: Users) -> int:
                 delete_msg_add = 1
                 text_parts = TextProcessor.prepare_text_parts(text)
                 mailing_message = await bot.send_animation(
@@ -183,7 +182,7 @@ class Func:
                 )
                 for part_text in text_parts:
                     if part_text or (part_text == text_parts[-1] and reply_markup):
-                        await bot.send_message(
+                        mailing_message = await bot.send_message(
                             chat_id=user.user_id,
                             text=part_text if part_text else "⬆️ Клавиатура ⬆️",
                             disable_web_page_preview=True,
@@ -196,11 +195,11 @@ class Func:
                     await cls.pin_msg_delete_notification(
                         bot, user.user_id, mailing_message.message_id, delete_msg_add
                     )
+                return mailing_message.message_id
 
             return mailing_func
         elif media_type == "video":
-
-            async def mailing_func(user: Users) -> None:
+            async def mailing_func(user: Users) -> int:
                 delete_msg_add = 1
                 text_parts = TextProcessor.prepare_text_parts(text)
                 mailing_message = await bot.send_video(
@@ -211,7 +210,7 @@ class Func:
                 )
                 for part_text in text_parts:
                     if part_text or (part_text == text_parts[-1] and reply_markup):
-                        await bot.send_message(
+                        mailing_message = await bot.send_message(
                             chat_id=user.user_id,
                             text=part_text if part_text else "⬆️ Клавиатура ⬆️",
                             disable_web_page_preview=True,
@@ -224,11 +223,11 @@ class Func:
                     await cls.pin_msg_delete_notification(
                         bot, user.user_id, mailing_message.message_id, delete_msg_add
                     )
+                return mailing_message.message_id
 
             return mailing_func
         elif media_type == "document":
-
-            async def mailing_func(user: Users) -> None:
+            async def mailing_func(user: Users) -> int:
                 delete_msg_add = 1
                 text_parts = TextProcessor.prepare_text_parts(text)
                 mailing_message = await bot.send_document(
@@ -239,7 +238,7 @@ class Func:
                 )
                 for part_text in text_parts:
                     if part_text or (part_text == text_parts[-1] and reply_markup):
-                        await bot.send_message(
+                        mailing_message = await bot.send_message(
                             chat_id=user.user_id,
                             text=part_text if part_text else "⬆️ Клавиатура ⬆️",
                             disable_web_page_preview=True,
@@ -252,11 +251,11 @@ class Func:
                     await cls.pin_msg_delete_notification(
                         bot, user.user_id, mailing_message.message_id, delete_msg_add
                     )
+                return mailing_message.message_id
 
             return mailing_func
         elif media_type == "video_note":
-
-            async def mailing_func(user: Users) -> None:
+            async def mailing_func(user: Users) -> int:
                 mailing_message = await bot.send_video_note(
                     chat_id=user.user_id,
                     video_note=media_content,
@@ -266,11 +265,11 @@ class Func:
                     await cls.pin_msg_delete_notification(
                         bot, user.user_id, mailing_message.message_id
                     )
+                return mailing_message.message_id
 
             return mailing_func
         elif media_type == "voice":
-
-            async def mailing_func(user: Users) -> None:
+            async def mailing_func(user: Users) -> int:
                 delete_msg_add = 1
                 text_parts = TextProcessor.prepare_text_parts(text)
                 mailing_message = await bot.send_voice(
@@ -281,7 +280,7 @@ class Func:
                 )
                 for part_text in text_parts:
                     if part_text or (part_text == text_parts[-1] and reply_markup):
-                        await bot.send_message(
+                        mailing_message = await bot.send_message(
                             chat_id=user.user_id,
                             text=part_text if part_text else "⬆️ Клавиатура ⬆️",
                             disable_web_page_preview=True,
@@ -294,11 +293,11 @@ class Func:
                     await cls.pin_msg_delete_notification(
                         bot, user.user_id, mailing_message.message_id, delete_msg_add
                     )
+                return mailing_message.message_id
 
             return mailing_func
         elif media_type == "sticker":
-
-            async def mailing_func(user: Users) -> None:
+            async def mailing_func(user: Users) -> int:
                 mailing_message = await bot.send_sticker(
                     chat_id=user.user_id,
                     sticker=media_content,
@@ -308,11 +307,11 @@ class Func:
                     await cls.pin_msg_delete_notification(
                         bot, user.user_id, mailing_message.message_id
                     )
+                return mailing_message.message_id
 
             return mailing_func
         elif media_type == "audio":
-
-            async def mailing_func(user: Users) -> None:
+            async def mailing_func(user: Users) -> int:
                 delete_msg_add = 1
                 text_parts = TextProcessor.prepare_text_parts(text)
                 mailing_message = await bot.send_audio(
@@ -323,7 +322,7 @@ class Func:
                 )
                 for part_text in text_parts:
                     if part_text or (part_text == text_parts[-1] and reply_markup):
-                        await bot.send_message(
+                        mailing_message = await bot.send_message(
                             chat_id=user.user_id,
                             text=part_text if part_text else "⬆️ Клавиатура ⬆️",
                             disable_web_page_preview=True,
@@ -336,11 +335,11 @@ class Func:
                     await cls.pin_msg_delete_notification(
                         bot, user.user_id, mailing_message.message_id, delete_msg_add
                     )
+                return mailing_message.message_id
 
             return mailing_func
         elif not media_type:
-
-            async def mailing_func(user: Users) -> None:
+            async def mailing_func(user: Users) -> int:
                 text_parts = TextProcessor.prepare_text_parts(
                     text, first_len=cls.MAX_MESSAGE_LENGTH
                 )
@@ -358,6 +357,7 @@ class Func:
                     await cls.pin_msg_delete_notification(
                         bot, user.user_id, mailing_message.message_id
                     )
+                return mailing_message.message_id
 
             return mailing_func
         else:
@@ -373,7 +373,7 @@ class Func:
         text: str,
         album_list_indices: List[int],
         reply_markup=None,
-    ) -> Coroutine[Any, Any, None]:
+    ) -> Coroutine[Any, Any, int]:
         """
         Собираем функцию для рассылки с альбомом.
         """
@@ -411,7 +411,7 @@ class Func:
 
             album_list_medias.append(media_item)
 
-        async def func_to_mailing(user: Users) -> None:
+        async def func_to_mailing(user: Users) -> int:
             messages = await bot.send_media_group(
                 chat_id=user.user_id, media=album_list_medias
             )
@@ -419,7 +419,7 @@ class Func:
 
             for plain_text in plain_texts:
                 if plain_text:
-                    await bot.send_message(
+                    messages = await bot.send_message(
                         chat_id=user.user_id,
                         text=plain_text,
                         disable_web_page_preview=True,
@@ -438,6 +438,9 @@ class Func:
                 await messages[0].reply(
                     text="⬆️ Клавиатура ⬆️", reply_markup=reply_markup
                 )
+            if isinstance(messages, list):
+                messages = messages[0]
+            return messages.message_id
 
         return func_to_mailing
 
@@ -517,7 +520,7 @@ class Func:
         media_group_id: List[Optional[int]],
         pin_bool: bool,
         reply_markup: Optional[bool] = None,
-    ) -> Coroutine[Any, Any, None]:
+    ) -> Coroutine[Any, Any, list[int]]:
         """
         Собираем функцию для рассылки.
         """
@@ -554,10 +557,12 @@ class Func:
                     )
                 )
 
-            async def result_method(user: Users) -> None:
+            async def result_method(user: Users) -> list[int]:
+                msg_ids = []
                 for func_to_mailing_method in func_to_mailing_methods:
-                    await func_to_mailing_method(user)
+                    msg_ids.append(await func_to_mailing_method(user))
                     await asyncio.sleep(1)
+                return msg_ids
 
             result_methods.append(result_method)
 
@@ -587,17 +592,21 @@ class Func:
                         )
                     )
 
-            async def result_method(user: Users) -> None:
+            async def result_method(user: Users) -> list[int]:
+                msg_ids = []
                 for one_msg_method in one_msg_methods:
-                    await one_msg_method(user)
+                    msg_ids.append(await one_msg_method(user))
                     await asyncio.sleep(1)
+                return msg_ids
 
             result_methods.append(result_method)
 
-        async def method(user: Users) -> None:
+        async def method(user: Users) -> list[int]:
+            all_msg_ids = []
             for result_method in result_methods:
-                await result_method(user)
+                all_msg_ids.extend(await result_method(user))
                 await asyncio.sleep(1)
+            return all_msg_ids
 
         return method
 

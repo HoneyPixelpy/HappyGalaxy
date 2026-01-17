@@ -20,6 +20,7 @@ from django.contrib import admin
 from django.urls import include, path
 from rest_framework import routers
 
+
 router = routers.DefaultRouter()
 router.register(r"users", UserViewSet, basename="user")
 router.register(r"family-ties", FamilyTiesViewSet, basename="family-ties")
@@ -30,7 +31,7 @@ router.register(r"lumberjack-games", LumberjackGameViewSet, basename="lumberjack
 router.register(r"geo-hunter", GeoHunterGameViewSet, basename="geo-hunter")
 router.register(r"work-keys", WorkKeysViewSet, basename="work-keys")
 router.register(r"bonuses", BonusesViewSet, basename="bonuses")
-router.register(r"use-bonuses", UseBonusesViewSet, basename="use-bonuses")
+# router.register(r"use-bonuses", UseBonusesViewSet, basename="use-bonuses")
 router.register(r"quests", QuestsViewSet, basename="quests")
 router.register(r"use-quests", UseQuestsViewSet, basename="use-quests")
 router.register(r"reward_data", RewardViewSet, basename="reward_data")
@@ -50,6 +51,11 @@ router.register(
     r"aggregation-daily-stats",
     AggregatorDailyStatsViewSet,
     basename="aggregation-daily-stats",
+)
+router.register(
+    r"rating",
+    RatingViewSet,
+    basename="rating",
 )
 
 

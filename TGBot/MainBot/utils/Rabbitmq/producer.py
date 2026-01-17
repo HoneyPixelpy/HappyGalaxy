@@ -12,22 +12,18 @@ class RabbitMQProducer:
 
     def produce_action(self, topic, backup_data):
         """Отправка backup в RabbitMQ с гарантией доставки"""
-        try:
-            with pika.BlockingConnection(
-                RabbitMQConfig.connection_params
-            ) as connection:
-                with connection.channel() as channel:
-                    # NOTE channel.queue_declare -> очередя создаются consumer (другим сервисом)
+        with pika.BlockingConnection(
+            RabbitMQConfig.connection_params
+        ) as connection:
+            with connection.channel() as channel:
+                # NOTE channel.queue_declare -> очередя создаются consumer (другим сервисом)
 
-                    channel.basic_publish(
-                        exchange="",
-                        routing_key=topic,
-                        body=json.dumps(backup_data, ensure_ascii=False),
-                    )
+                channel.basic_publish(
+                    exchange="",
+                    routing_key=topic,
+                    body=json.dumps(backup_data, ensure_ascii=False),
+                )
 
-        except Exception as e:
-            logger.exception(f"❌ Failed to send to RabbitMQ: {e}")
-            raise
 
     async def get_button_text(self, data, inline_keyboard):
         for row in inline_keyboard:

@@ -23,10 +23,10 @@ from MainBot.base.models import (
     Users,
 )
 from MainBot.base.orm_requests import InteractiveGameMethods, UserMethods
-from MainBot.keyboards.inline import IKB as inline
-from MainBot.keyboards.reply import KB as reply
+from MainBot.keyboards import inline, reply, selector
 from MainBot.state.state import SInteractiveGame
 from MainBot.utils.MyModule.Functions import Func
+from MainBot.utils.MyModule.message import MessageManager
 from Redis.main import RedisManager
 
 lock = asyncio.Lock()
@@ -189,7 +189,7 @@ class NotificationInteractiveGame(InteractiveGameStorage, SupportInteractiveGame
         await call.bot.send_message(
             chat_id=user.user_id,
             text=result_worker_game,
-            reply_markup=await reply.main_menu(user),
+            reply_markup=await selector.main_menu(user),
         )
         await call.bot.send_message(
             chat_id=config.game_chat,
@@ -319,14 +319,17 @@ class NotificationInteractiveGame(InteractiveGameStorage, SupportInteractiveGame
             // 60,
         )
         keyboard = await inline.game_info(game.id, user.user_id == game.user.user_id)
-        try:
-            if not call:
-                raise Exception("Надо просто отправить сообщение")
-            await call.message.edit_text(text=text, reply_markup=keyboard)
-        except:
-            await bot.send_message(
-                chat_id=user.user_id, text=text, reply_markup=keyboard
-            )
+        if not call:
+            raise Exception("Надо просто отправить сообщение")
+        
+        await MessageManager(
+            call,
+            user.user_id
+        ).send_or_edit(
+            text,
+            keyboard,
+            "game"
+        )
 
     async def send_error_finally_game(self, user: Users, bot: Bot) -> None:
         await bot.send_message(
@@ -369,10 +372,15 @@ class NotificationInteractiveGame(InteractiveGameStorage, SupportInteractiveGame
                 ]
             ),
         )
-        try:
-            await call.message.edit_text(text=text)
-        except:
-            await bot.send_message(chat_id=user.user_id, text=text)
+        
+        await MessageManager(
+            call,
+            user.user_id
+        ).send_or_edit(
+            text,
+            None,
+            "game"
+        )
 
     async def send_result_game_logs_chat(
         self, bot: Bot, game_all_info: InteractiveGameAllInfo
@@ -479,12 +487,17 @@ class CreateInteractiveGame(MainInteractiveGame):
         message: Optional[Message] = None,
     ) -> None:
         text = await self.create_text(data)
+
         if call:
-            await call.message.edit_text(
+            await MessageManager(
+                call,
+                user.user_id
+            ).send_or_edit(
                 text,
-                reply_markup=await inline.create_game(
+                await inline.create_game(
                     await self.check_required_data(data)
                 ),
+                "game"
             )
         else:
             await message.bot.send_message(
@@ -502,19 +515,14 @@ class CreateInteractiveGame(MainInteractiveGame):
         call: Optional[CallbackQuery] = None,
         message: Optional[Message] = None,
     ) -> None:
-        try:
-            if call:
-                message = call.message
+        if call:
+            message = call.message
 
-            await message.bot.send_message(
-                chat_id=user.user_id,
-                text=texts.InteractiveGame.Create.title,
-                reply_markup=await reply.back(),
-            )
-        except Exception as ex:
-            error_text = f"{__name__} -> {ex.__class__.__name__} -> {ex}"
-            logger.exception(error_text)
-            await Func.send_error_to_developer(error_text)
+        await message.bot.send_message(
+            chat_id=user.user_id,
+            text=texts.InteractiveGame.Create.title,
+            reply_markup=await reply.back(),
+        )
 
     async def request_description(
         self,
@@ -523,19 +531,14 @@ class CreateInteractiveGame(MainInteractiveGame):
         call: Optional[CallbackQuery] = None,
         message: Optional[Message] = None,
     ) -> None:
-        try:
-            if call:
-                message = call.message
+        if call:
+            message = call.message
 
-            await message.bot.send_message(
-                chat_id=user.user_id,
-                text=texts.InteractiveGame.Create.description,
-                reply_markup=await reply.back(),
-            )
-        except Exception as ex:
-            error_text = f"{__name__} -> {ex.__class__.__name__} -> {ex}"
-            logger.exception(error_text)
-            await Func.send_error_to_developer(error_text)
+        await message.bot.send_message(
+            chat_id=user.user_id,
+            text=texts.InteractiveGame.Create.description,
+            reply_markup=await reply.back(),
+        )
 
     async def request_reward_starcoins(
         self,
@@ -544,7 +547,6 @@ class CreateInteractiveGame(MainInteractiveGame):
         call: Optional[CallbackQuery] = None,
         message: Optional[Message] = None,
     ) -> None:
-        try:
             if call:
                 message = call.message
 
@@ -553,10 +555,6 @@ class CreateInteractiveGame(MainInteractiveGame):
                 text=texts.InteractiveGame.Create.reward_starcoins,
                 reply_markup=await reply.back(),
             )
-        except Exception as ex:
-            error_text = f"{__name__} -> {ex.__class__.__name__} -> {ex}"
-            logger.exception(error_text)
-            await Func.send_error_to_developer(error_text)
 
     async def request_reward_type(
         self,
@@ -565,7 +563,6 @@ class CreateInteractiveGame(MainInteractiveGame):
         call: Optional[CallbackQuery] = None,
         message: Optional[Message] = None,
     ) -> None:
-        try:
             if call:
                 message = call.message
 
@@ -574,10 +571,6 @@ class CreateInteractiveGame(MainInteractiveGame):
                 text=texts.InteractiveGame.Create.reward_type,
                 reply_markup=await reply.interactive_game_reward_type(),
             )
-        except Exception as ex:
-            error_text = f"{__name__} -> {ex.__class__.__name__} -> {ex}"
-            logger.exception(error_text)
-            await Func.send_error_to_developer(error_text)
 
     async def request_min_rang(
         self,
@@ -586,7 +579,6 @@ class CreateInteractiveGame(MainInteractiveGame):
         call: Optional[CallbackQuery] = None,
         message: Optional[Message] = None,
     ) -> None:
-        try:
             if call:
                 message = call.message
 
@@ -595,10 +587,6 @@ class CreateInteractiveGame(MainInteractiveGame):
                 text=texts.InteractiveGame.Create.min_rang,
                 reply_markup=await reply.back(),
             )
-        except Exception as ex:
-            error_text = f"{__name__} -> {ex.__class__.__name__} -> {ex}"
-            logger.exception(error_text)
-            await Func.send_error_to_developer(error_text)
 
     async def request_max_rang(
         self,
@@ -607,7 +595,6 @@ class CreateInteractiveGame(MainInteractiveGame):
         call: Optional[CallbackQuery] = None,
         message: Optional[Message] = None,
     ) -> None:
-        try:
             if call:
                 message = call.message
 
@@ -616,10 +603,6 @@ class CreateInteractiveGame(MainInteractiveGame):
                 text=texts.InteractiveGame.Create.max_rang,
                 reply_markup=await reply.back(),
             )
-        except Exception as ex:
-            error_text = f"{__name__} -> {ex.__class__.__name__} -> {ex}"
-            logger.exception(error_text)
-            await Func.send_error_to_developer(error_text)
 
     async def request_min_players(
         self,
@@ -628,7 +611,6 @@ class CreateInteractiveGame(MainInteractiveGame):
         call: Optional[CallbackQuery] = None,
         message: Optional[Message] = None,
     ) -> None:
-        try:
             if call:
                 message = call.message
 
@@ -637,10 +619,6 @@ class CreateInteractiveGame(MainInteractiveGame):
                 text=texts.InteractiveGame.Create.min_players,
                 reply_markup=await reply.back(),
             )
-        except Exception as ex:
-            error_text = f"{__name__} -> {ex.__class__.__name__} -> {ex}"
-            logger.exception(error_text)
-            await Func.send_error_to_developer(error_text)
 
     async def request_max_players(
         self,
@@ -649,7 +627,6 @@ class CreateInteractiveGame(MainInteractiveGame):
         call: Optional[CallbackQuery] = None,
         message: Optional[Message] = None,
     ) -> None:
-        try:
             if call:
                 message = call.message
 
@@ -658,10 +635,6 @@ class CreateInteractiveGame(MainInteractiveGame):
                 text=texts.InteractiveGame.Create.max_players,
                 reply_markup=await reply.back(),
             )
-        except Exception as ex:
-            error_text = f"{__name__} -> {ex.__class__.__name__} -> {ex}"
-            logger.exception(error_text)
-            await Func.send_error_to_developer(error_text)
 
     async def request_type_game(
         self,
@@ -670,7 +643,6 @@ class CreateInteractiveGame(MainInteractiveGame):
         call: Optional[CallbackQuery] = None,
         message: Optional[Message] = None,
     ) -> None:
-        try:
             if call:
                 message = call.message
 
@@ -679,10 +651,6 @@ class CreateInteractiveGame(MainInteractiveGame):
                 text=texts.InteractiveGame.Create.type_game,
                 reply_markup=await reply.interactive_game_type_game(),
             )
-        except Exception as ex:
-            error_text = f"{__name__} -> {ex.__class__.__name__} -> {ex}"
-            logger.exception(error_text)
-            await Func.send_error_to_developer(error_text)
 
     async def set_state(
         self, user: Users, call: CallbackQuery, key: str, state: FSMContext
@@ -768,7 +736,7 @@ class CreateInteractiveGame(MainInteractiveGame):
                 await message.bot.delete_message(
                     chat_id=user.user_id, message_id=message_id
                 )
-            except:
+            except: # exceptions.TelegramBadRequest
                 logger.warning(f"Не смогли удалить сообщение {__name__}")
 
         await self.create_info_msg(user, data, message=message)
@@ -794,7 +762,7 @@ class CreateInteractiveGame(MainInteractiveGame):
             await call.bot.send_message(
                 chat_id=user.user_id,
                 text=texts.Texts.start,
-                reply_markup=await reply.main_menu(user),
+                reply_markup=await selector.main_menu(user),
             )
         else:
             await call.message.delete_reply_markup()
@@ -869,7 +837,7 @@ class ReadyInteractiveGame(MainInteractiveGame):
 
             except exceptions.TelegramRetryAfter as ex:
                 logger.error(f"Сработало исключение!!!\n!!!{ex}")
-            except Exception as ex:
+            except Exception as ex: # exceptions.TelegramBadRequest
                 logger.error(f"Сработало исключение!!!\n!!!{ex}")
 
         else:
@@ -954,7 +922,7 @@ class ReadyInteractiveGame(MainInteractiveGame):
                 await asyncio.sleep(1)
             except exceptions.TelegramRetryAfter as ex:
                 logger.error(f"Сработало исключение!!!\n!!!{ex}")
-            except Exception as ex:
+            except Exception as ex: # exceptions.TelegramBadRequest
                 logger.error(f"Сработало исключение!!!\n!!!{ex}")
 
     async def delete_pending(
@@ -965,7 +933,7 @@ class ReadyInteractiveGame(MainInteractiveGame):
         """
         try:
             await call.message.delete()
-        except:
+        except: # exceptions.TelegramBadRequest
             pass
         await super().clear(user, f"mailing_new_game:{game_info.game.id}")
         await self.delete_game_mailing(call.bot, game_info.game, game_info.users)
@@ -984,7 +952,7 @@ class StartInteractiveGame(MainInteractiveGame):
                 await asyncio.sleep(1)
             except exceptions.TelegramRetryAfter as ex:
                 logger.error(f"Сработало исключение!!!\n!!!{ex}")
-            except Exception as ex:
+            except Exception as ex: # exceptions.TelegramBadRequest
                 logger.error(f"Сработало исключение!!!\n!!!{ex}")
 
         else:
@@ -1143,8 +1111,16 @@ class PlayersPanel(MainInteractiveGame):
         kb = await self.build_reply_markup(
             game_info, selected, "s_player_end_game", pagination
         )
+        
         if call:
-            await call.message.edit_text(text, reply_markup=kb)
+            await MessageManager(
+                call,
+                user.user_id
+            ).send_or_edit(
+                text,
+                kb,
+                "game"
+            )
         else:
             await bot.send_message(user.user_id, text, reply_markup=kb)
 
@@ -1219,7 +1195,7 @@ class FinallyInteractiveGame(PlayersPanel):
 
             except exceptions.TelegramRetryAfter as ex:
                 logger.error(f"Сработало исключение!!!\n!!!{ex}")
-            except Exception as ex:
+            except Exception as ex: # exceptions.TelegramBadRequest
                 logger.error(f"Сработало исключение!!!\n!!!{ex}")
 
 
@@ -1250,7 +1226,7 @@ class InteractiveGame(
             message = call.message
             try:
                 await message.delete()
-            except:
+            except: # exceptions.TelegramBadRequest
                 pass
 
         await super().set(user, "type_game", "all")

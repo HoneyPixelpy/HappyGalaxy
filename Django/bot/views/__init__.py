@@ -8,7 +8,7 @@ __all__ = [
     "GeoHunterGameViewSet",
     "WorkKeysViewSet",
     "BonusesViewSet",
-    "UseBonusesViewSet",
+    # "UseBonusesViewSet",
     "QuestsViewSet",
     "UseQuestsViewSet",
     "RewardViewSet",
@@ -19,11 +19,15 @@ __all__ = [
     "InteractiveGameViewSet",
     "QuestModerationAttemptViewSet",
     "AggregatorDailyStatsViewSet",
+    "RatingViewSet",
 ]
 
+from collections import defaultdict
 from datetime import datetime
+from typing import Any, Callable, Dict, List, Optional
 
 import pytz
+from bot.service.exceptions import DuplicateOperationException
 from bot.service.rang import RangService
 from bot.views.analytics import AggregateArchive
 from loguru import logger
@@ -61,7 +65,7 @@ from .personal import (
 )
 from .quest import Quest_MA_Methods, QuestMethods, UseQuestMethods
 from .shop import Pikmi_ShopMethods, PurchasesMethods
-from .utils import QueryData, check_sql_injection, queue_request
+from .utils import QueryData, check_sql_injection, queue_request, idempotency_request
 
 """ NOTE
 НА СТАДИИ РЕФАКТОРИНГА
@@ -325,6 +329,7 @@ class UserViewSet(ViewSet):
 
     # POST /api/v1/users/
     @queue_request
+    @idempotency_request
     def create(self, request):
         """create
         Создаем нового пользователя и две другие записи
@@ -512,6 +517,7 @@ class FamilyTiesViewSet(ViewSet):
 
     # POST /api/v1/family-ties/
     @queue_request
+    @idempotency_request
     def create(self, request):
         """Создать новую связь
         - Проверяем есть ли уже такая связь;
@@ -526,7 +532,7 @@ class FamilyTiesViewSet(ViewSet):
         from_user = UserMethods.get(user_id=from_user_id)
         to_user = UserMethods.get(user_id=to_user_id)
 
-        return FamilyTiesMethods.create(from_user, to_user)
+        FamilyTiesMethods.create(from_user, to_user)
 
     # GET /api/v1/family-ties/{user_id}/get_family/
     @action(detail=True, methods=["get"])
@@ -571,6 +577,7 @@ class PurchasesViewSet(ViewSet):
 
     # POST /api/v1/purchases/
     @queue_request
+    @idempotency_request
     def create(self, request):
         """Создать новую покупку"""
         user_id = QueryData.check_params(request, "user_id")
@@ -580,13 +587,11 @@ class PurchasesViewSet(ViewSet):
         product_id = QueryData.check_params(request, "product_id")
         delivery_data = QueryData.check_params(request, "delivery_data")
         
-        logger.debug(delivery_data)
-        logger.debug(type(delivery_data))
-
         user = UserMethods.get(user_id=user_id)
         product = Pikmi_ShopMethods.get(pk=product_id)
 
-        return PurchasesMethods.create(user, product, title, description, cost, delivery_data)
+        Pikmi_ShopMethods.buy(product)
+        PurchasesMethods.create(user, title, description, cost, delivery_data)
 
     # GET /api/v1/purchases/user_purchases/?completed=False&user_id=456
     @action(detail=False, methods=["get"])
@@ -619,9 +624,13 @@ class PurchasesViewSet(ViewSet):
     def add_message_id(self, request):
         """
         Добавляем/изменяем id сообщения
+        которое нужно пересылать для отправки сообщения пользователю
         """
         purchases_id = QueryData.check_params(request, "purchases_id")
         message_id = QueryData.check_params(request, "message_id")
+        
+        logger.debug(purchases_id)
+        logger.debug(message_id)
 
         purchase = PurchasesMethods.get(pk=purchases_id)
 
@@ -637,9 +646,18 @@ class PurchasesViewSet(ViewSet):
         purchases_id = QueryData.check_params(request, "purchases_id")
 
         purchase = PurchasesMethods.get(pk=purchases_id)
-
+        
+        response_data = PurchasesSerializer(purchase).data
+        
         UserMethods.delete_purch(purchase.user, purchase.cost)
         PurchasesMethods.delete(purchase)
+        
+        logger.debug(response_data)
+        
+        return Response(
+            data=response_data,
+            status=status.HTTP_200_OK
+        )
 
     # PATCH /api/v1/purchases/success_buy/
     @action(detail=False, methods=["patch"])  # , url_path='confirm-purchase'
@@ -651,8 +669,13 @@ class PurchasesViewSet(ViewSet):
         purchases_id = QueryData.check_params(request, "purchases_id")
 
         purchase = PurchasesMethods.get(pk=purchases_id)
-
+        
         PurchasesMethods.success(purchase)
+        
+        return Response(
+            data=PurchasesSerializer(purchase).data,
+            status=status.HTTP_200_OK
+        )
 
     # GET /api/v1/purchases/answer_buy/
     @action(detail=False, methods=["get"])
@@ -662,11 +685,62 @@ class PurchasesViewSet(ViewSet):
         Получаем айди пользователя
         """
         answer_message_id = QueryData.check_params(request, "answer_message_id")
-
+        
         purchase = PurchasesMethods.get(answer_message_id=answer_message_id)
+        
+        PurchasesMethods.success(purchase)
 
         return Response(
-            data=purchase.message_id,
+            data=PurchasesSerializer(purchase).data,
+            status=status.HTTP_200_OK
+        )
+
+    # PATCH /api/v1/purchases/product_message_id/
+    @action(detail=False, methods=["patch"])  # , url_path='confirm-purchase'
+    @queue_request
+    def product_message_id(self, request):
+        """
+        Добавляем id сообщений отправленных товаров
+        """
+        answer_message_id = QueryData.check_params(request, "answer_message_id")
+        msg_ids = QueryData.check_params(request, "msg_ids")
+        
+        purchase = PurchasesMethods.get(answer_message_id=answer_message_id)
+        
+        logger.debug(purchase.product_ids)
+
+        PurchasesMethods.product_message_ids(purchase, msg_ids)
+        
+        logger.debug(purchase.product_ids)
+        
+        return Response(
+            status=status.HTTP_200_OK
+        )
+
+    # PATCH /api/v1/purchases/rollback_buy/
+    @action(detail=False, methods=["patch"])  # , url_path='confirm-purchase'
+    @queue_request
+    def rollback_buy(self, request):
+        """
+        Откатываем принятие выдачи товара
+        """
+        purchases_id = QueryData.check_params(request, "purchases_id")
+        
+        purchase = PurchasesMethods.get(pk=purchases_id)
+        
+        logger.debug(purchase.product_ids)
+        
+        PurchasesMethods.rollback_buy(purchase)
+        
+        product = Pikmi_ShopMethods.get(title=purchase.title)
+        
+        logger.debug(purchase.product_ids)
+        
+        return Response(
+            data={
+                "product": PikmiShopSerializer(product).data,
+                "purchase": PurchasesSerializer(purchase).data
+                },
             status=status.HTTP_200_OK
         )
 
@@ -738,6 +812,7 @@ class BonusesViewSet(ViewSet):
 
     # POST /api/v1/bonuses/
     @queue_request
+    @idempotency_request
     def create(self, request):
         type_bonus = QueryData.check_params(request, "type_bonus")
         expires_at = QueryData.check_params(request, "expires_at")
@@ -780,6 +855,7 @@ class BonusesViewSet(ViewSet):
     # POST /api/v1/bonuses/claim_bonus/
     @action(detail=False, methods=["post"])  # , url_path='claim-bonus'
     @queue_request
+    @idempotency_request
     def claim_bonus(self, request):
         """Обрабатывает получение бонуса пользователем"""
         user_id = QueryData.check_params(request, "user_id")
@@ -810,35 +886,36 @@ class BonusesViewSet(ViewSet):
             return Response({"text": "undefined_error"}, status=status.HTTP_200_OK)
 
 
-class UseBonusesViewSet(ViewSet):
+# class UseBonusesViewSet(ViewSet):
 
-    # GET /api/v1/use-bonuses/?user_id=123&bonus_id=123
-    @action(detail=False, methods=["get"])
-    @queue_request
-    def get_bonus(self, request):
-        user_id = QueryData.check_params(request, "user_id")
-        bonus_id = QueryData.check_params(request, "bonus_id")
+#     # GET /api/v1/use-bonuses/?user_id=123&bonus_id=123
+#     @action(detail=False, methods=["get"])
+#     @queue_request
+#     def get_bonus(self, request):
+#         user_id = QueryData.check_params(request, "user_id")
+#         bonus_id = QueryData.check_params(request, "bonus_id")
 
-        user = UserMethods.get(pk=user_id)
-        bonus = BonusesMethods.get(pk=bonus_id)
+#         user = UserMethods.get(pk=user_id)
+#         bonus = BonusesMethods.get(pk=bonus_id)
 
-        user_bonuses = UseBonusesMethods.get(user=user, bonus=bonus)
+#         user_bonuses = UseBonusesMethods.get(user=user, bonus=bonus)
 
-        # NOTE тут раньше несколько записей возвращалось
-        return Response(
-            UseBonusesSerializer(user_bonuses).data, status=status.HTTP_200_OK
-        )
+#         # NOTE тут раньше несколько записей возвращалось
+#         return Response(
+#             UseBonusesSerializer(user_bonuses).data, status=status.HTTP_200_OK
+#         )
 
-    # POST /api/v1/use-bonuses/
-    @queue_request
-    def create(self, request):
-        user_id = QueryData.check_params(request, "user_id")
-        bonus_id = QueryData.check_params(request, "bonus_id")
+#     # POST /api/v1/use-bonuses/
+#     @queue_request
+#     @idempotency_request
+#     def create(self, request):
+#         user_id = QueryData.check_params(request, "user_id")
+#         bonus_id = QueryData.check_params(request, "bonus_id")
 
-        user = UserMethods.get(pk=user_id)
-        bonus = BonusesMethods.get(pk=bonus_id)
+#         user = UserMethods.get(pk=user_id)
+#         bonus = BonusesMethods.get(pk=bonus_id)
 
-        return UseBonusesMethods.create(user, bonus)
+#         return UseBonusesMethods.create(user, bonus)
 
 
 class QuestsViewSet(ViewSet):
@@ -890,6 +967,7 @@ class UseQuestsViewSet(ViewSet):
 
     # POST /api/v1/use-quests/
     @queue_request
+    @idempotency_request
     def create(self, request):
         user_id = QueryData.check_params(request, "user_id")
         quest_id = QueryData.check_params(request, "quest_id")
@@ -902,6 +980,7 @@ class UseQuestsViewSet(ViewSet):
     # POST /api/v1/use-quests/create_idea_daily/
     @action(detail=False, methods=["post"])
     @queue_request
+    @idempotency_request
     def create_idea_daily(self, request):
         user_id = QueryData.check_params(request, "user_id")
         quest_id = QueryData.check_params(request, "quest_id")
@@ -1013,6 +1092,7 @@ class PromocodesViewSet(ViewSet):
 
     # POST /api/v1/promocodes/
     @queue_request
+    @idempotency_request
     def create(self, request):
         user_id = QueryData.check_params(request, "user_id")
         code = QueryData.check_params(request, "code")
@@ -1031,6 +1111,7 @@ class ManagementLinksViewSet(ViewSet):
 
     # POST /api/v1/management-link/
     @queue_request
+    @idempotency_request
     def create(self, request):
         user_id = QueryData.check_params(request, "user_id")
         utm = QueryData.check_params(request, "utm")
@@ -1152,3 +1233,284 @@ class AggregatorDailyStatsViewSet(ViewSet):
     @queue_request
     def pipeline(self, request):
         return AggregateArchive().pipeline()
+
+
+class RatingViewSet(ViewSet):
+    
+    # GET /api/v1/rating/daily_login/
+    @action(detail=False, methods=["get"])
+    @queue_request
+    def daily_login(self, request):
+        """
+        Делаем запрос к квестам получая трех с наивысшим показателем
+        на квесте с именем «Не ухАди»
+        
+        Если наша цель есть в этом топе, то не делаем отдельный
+        запрос по юзеру
+        
+        Если нету то получаем инфу о квесте «Не ухАди» для нашего
+        пользователя
+        
+        Делаем запрос по каждому пользоватлю из топа (не включая нашего)
+        возвращая только псевдоним, имя и фамилию
+        """
+        user_id = int(QueryData.check_params(request, "user_id"))
+        
+        quest = QuestMethods.get_dont_go()
+        
+        all_daily_login = UseQuestMethods.get_all_daily_login(quest)
+
+        result_data = CollectRatingData().main(
+            user_id,
+            "user__user_id",
+            "count_use",
+            0,
+            all_daily_login
+        )
+        
+        return Response(
+            data=result_data, 
+            status=status.HTTP_200_OK
+        )
+
+
+    # GET /api/v1/rating/collect_starcoins/
+    @action(detail=False, methods=["get"])
+    @queue_request
+    def collect_starcoins(self, request):
+        """
+        Получаем топ три по all_starcoins и их
+        псевдоним, имя и фамилию
+        
+        Если нашего пользователя там нет, то совершаем
+        отдельный запрос для него
+        """
+        user_id = int(QueryData.check_params(request, "user_id"))
+
+        list_all_starcoins = UserMethods.get_list_all_starcoins()
+
+        result_data = CollectRatingData(
+            lambda x, y: round((x - y), 2),
+            lambda x: round(x, 2)
+        ).main(
+            user_id,
+            "user_id",
+            "all_starcoins",
+            0,
+            list_all_starcoins
+        )
+        
+        return Response(
+            data=result_data, 
+            status=status.HTTP_200_OK
+        )
+
+
+    # GET /api/v1/rating/guess_country/
+    @action(detail=False, methods=["get"])
+    @queue_request
+    def guess_country(self, request):
+        """
+        Больше всего правильных ответов в гео хантере
+        """
+        user_id = int(QueryData.check_params(request, "user_id"))
+
+        list_correct_answers = GeoHunterViewMethods.get_list_correct_answers()
+
+        result_data = CollectRatingData().main(
+            user_id,
+            "user__user_id",
+            "total_true",
+            0,
+            list_correct_answers
+        )
+        
+        return Response(
+            data=result_data, 
+            status=status.HTTP_200_OK
+        )
+
+
+    # GET /api/v1/rating/make_clicks/
+    @action(detail=False, methods=["get"])
+    @queue_request
+    def make_clicks(self, request):
+        """
+        Больше всего кликов в кликере
+        """
+        user_id = int(QueryData.check_params(request, "user_id"))
+
+        list_correct_clicks = LumberjackGameViewMethods.get_list_correct_clicks()
+
+        result_data = CollectRatingData().main(
+            user_id,
+            "user__user_id",
+            "total_clicks",
+            0,
+            list_correct_clicks
+        )
+        
+        return Response(
+            data=result_data, 
+            status=status.HTTP_200_OK
+        )
+
+
+    # GET /api/v1/rating/completed_quests/
+    @action(detail=False, methods=["get"])
+    @queue_request
+    def completed_quests(self, request):
+        """
+        Больше всего выполненных квестов не включая
+        «Не ухАди» и те что на модерации
+        
+        # NOTE надо по другому брать данные может быть через записи модерации
+        """
+        user_id = int(QueryData.check_params(request, "user_id"))
+
+        quest = QuestMethods.get_dont_go()
+
+        raw_data = UseQuestMethods.get_all_completed_quests(quest)
+
+        user_totals = defaultdict(int)
+        for item in raw_data:
+            user_totals[item['user__user_id']] += item['count_use']
+        
+        sorted_users = sorted(user_totals.items(), key=lambda x: x[1], reverse=True)
+        
+        completed_quests = [
+            {
+                'user_id': user_id,
+                'total_count': total
+            } for user_id, total in sorted_users
+        ]
+
+        result_data = CollectRatingData().main(
+            user_id,
+            "user_id",
+            "total_count",
+            0,
+            completed_quests
+        )
+
+        return Response(
+            data=result_data, 
+            status=status.HTTP_200_OK
+        )
+
+
+    # GET /api/v1/rating/invited_friends/
+    @action(detail=False, methods=["get"])
+    @queue_request
+    def invited_friends(self, request):
+        """
+        Больше всего рефералок
+        """
+        user_id = int(QueryData.check_params(request, "user_id"))
+
+        referral_ids = UserMethods.get_users_referral_ids()
+        
+        user_totals = defaultdict(int)
+        for referral_data in referral_ids:
+            user_totals[referral_data["referral_user_id"]] += 1
+        
+        sorted_users = sorted(user_totals.items(), key=lambda x: x[1], reverse=True)
+        
+        completed_quests = [
+            {
+                'user_id': user_id,
+                'total_count': total
+            } for user_id, total in sorted_users
+        ]
+
+        result_data = CollectRatingData().main(
+            user_id,
+            "user_id",
+            "total_count",
+            0,
+            completed_quests
+        )
+
+        return Response(
+            data=result_data, 
+            status=status.HTTP_200_OK
+        )
+
+
+class CollectRatingData:
+
+    def __init__(
+        self,
+        calc_diff: Callable = lambda x, y: x - y,
+        calc_value: Callable = lambda x: x
+        ):
+        self.calc_diff = calc_diff
+        self.calc_value = calc_value
+        self.result_data: List = []
+        self.my_user: bool = False
+        self.pre_value: Optional[Any] = None
+        self.iter_value: Optional[Any] = None
+        self.next_place: int = 1
+
+    def get_user_info(
+        self,
+        place: int,
+        user_id: int,
+        value: Any,
+        find_user: bool = False
+    ) -> None:
+        user = UserMethods.get(user_id=user_id)
+
+        result = {
+            "place": place,
+            "nickname": (
+                user.nickname if user._nickname else 
+                f"{user.supername} {user.name}"
+            ),
+            "value": self.calc_value(value),
+            "my": find_user,
+            "top": place <= 3
+        }
+        
+        if find_user and place > 3:
+            result["next_place"] = self.next_place
+            result["difference"] = self.calc_diff(self.pre_value, value)
+            
+        self.result_data.append(result)
+
+    def main(
+        self,
+        user_id: int,
+        key_name: str,
+        value_name: str,
+        zero_value: int,
+        iterator: List[Dict]
+    ) -> List:
+        for place, completed_quest in enumerate(iterator, start=1):
+            if completed_quest[key_name] == user_id:
+                self.my_user = True
+                self.get_user_info(place, user_id, completed_quest[value_name], True)
+                continue
+            
+            if not self.pre_value or self.iter_value != completed_quest[value_name]:
+                self.next_place = place - 1
+                self.iter_value = iterator[self.next_place][value_name]
+                try:
+                    self.pre_value = iterator[self.next_place-1][value_name]
+                except:
+                    self.pre_value = iterator[self.next_place][value_name]
+            
+            if place > 3:
+                if self.my_user:
+                    break
+                else:
+                    continue
+            
+            self.get_user_info(place, completed_quest[key_name], completed_quest[value_name])
+        else:
+            if not self.my_user:
+                self.get_user_info(place, user_id, zero_value, True)
+        
+        return self.result_data
+
+

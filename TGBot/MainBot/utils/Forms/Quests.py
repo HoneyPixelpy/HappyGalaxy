@@ -13,14 +13,15 @@ from aiogram import Bot, types
 from aiogram.fsm.context import FSMContext
 from loguru import logger
 from MainBot.base.models import DailyQuests, IdeaQuests, Quests, SubscribeQuest, Users
-from MainBot.base.orm_requests import QuestsMethods, UseQuestsMethods, UserMethods
+from MainBot.base.orm_requests import IdempotencyKeyMethods, QuestsMethods, UseQuestsMethods, UserMethods
 from MainBot.config import bot
-from MainBot.keyboards.inline import IKB as inline
-from MainBot.keyboards.reply import KB as reply
+from MainBot.keyboards import inline, reply, selector
 from MainBot.state.state import Daily, Idea
 from MainBot.utils.errors import ListLengthChangedError, NoDesiredTypeError
 from MainBot.utils.MyModule import Func
+from MainBot.utils.MyModule.message import MessageManager
 from MainBot.utils.Rabbitmq import RabbitMQ
+from MainBot.utils.Forms.Menu import Menu
 from Redis.aggregator import QuestAggregator
 from Redis.main import RedisManager
 from VKBot import VKForms
@@ -45,7 +46,7 @@ class QuestPagination:
 
         except (ValueError, TypeError):
             return 1
-        except Exception as e:
+        except Exception as e: # Redis
             logger.error(f"Redis error in get_page_number: {e}")
             return 1
 
@@ -58,22 +59,20 @@ class QuestPagination:
             # Устанавливаем на 1 час (3600 сек)
             await redis_client.setex(key, 3600, pagination)
 
-        except Exception as e:
+        except Exception as e: # Redis
             logger.error(f"Redis error in set_page_number: {e}")
 
 
 class DailyQuest:
 
     async def get_daily_quest(
-        self, message: types.Message, user: Users, quest_id: int
+        self, call: types.CallbackQuery, user: Users, quest_id: int
     ) -> None:
         quest: Quests = await QuestsMethods().get_by_id(user.user_id, quest_id)
         if not quest:
-            await message.delete()
-            await message.bot.send_message(
-                chat_id=user.user_id,
+            await call.answer(
                 text=texts.Quests.Error.no_quest,
-                reply_markup=await reply.main_menu(user),
+                show_alert=True
             )
         else:
             daily_quest: DailyQuests = quest.quest_data
@@ -83,31 +82,24 @@ class DailyQuest:
                 description=daily_quest.description,
                 price=daily_quest.reward_starcoins,
             )
-            try:
-                await message.edit_text(
-                    text=text,
-                    reply_markup=await inline.daily_quest(quest.id),
-                    disable_web_page_preview=True,
-                )
-            except:
-                await message.bot.send_message(
-                    chat_id=user.user_id,
-                    text=text,
-                    reply_markup=await inline.daily_quest(quest.id),
-                    disable_web_page_preview=True,
-                )
-                await message.delete()
+            
+            await MessageManager(
+                call,
+                user.user_id
+            ).send_or_edit(
+                text,
+                await inline.daily_quest(quest.id),
+                "quests"
+            )
 
     async def action_daily_quest(
         self, call: types.CallbackQuery, state: FSMContext, user: Users, quest_id: int
     ) -> Optional[bool]:
         quest: Quests = await QuestsMethods().get_by_id(user.user_id, quest_id)
         if not quest:
-            await call.message.delete()
-            await call.message.bot.send_message(
-                chat_id=user.user_id,
+            await call.answer(
                 text=texts.Quests.Error.no_quest,
-                reply_markup=await reply.main_menu(user),
+                show_alert=True
             )
         else:
             daily_quest: DailyQuests = quest.quest_data
@@ -120,20 +112,15 @@ class DailyQuest:
                 text = texts.Quests.Texts.idea_call_action.format(
                     call_action=daily_quest.call_action
                 )
-                try:
-                    await call.message.edit_text(
-                        text=text,
-                        reply_markup=await reply.back(daily_quest.title),
-                        disable_web_page_preview=True,
-                    )
-                except:
-                    await call.message.bot.send_message(
-                        chat_id=user.user_id,
-                        text=text,
-                        reply_markup=await reply.back(daily_quest.title),
-                        disable_web_page_preview=True,
-                    )
-                    await call.message.delete()
+                
+                await MessageManager(
+                    call,
+                    user.user_id
+                ).send_or_edit(
+                    text,
+                    await inline.back(f"get_quest|daily|{quest_id}"),
+                    "quests"
+                )
 
                 await state.set_state(Daily.wait)
                 await state.update_data(
@@ -200,7 +187,8 @@ class DailyQuest:
             logger.debug(f"{success_admin} -> {user.user_id}")
 
             reward_starcoins_bool = await UseQuestsMethods().create_idea_daily(
-                user.id, state_data["id"]
+                user.id, state_data["id"],
+                idempotency_key=await IdempotencyKeyMethods.IKgenerate(user.user_id, message)
             )
             if not reward_starcoins_bool:
                 await message.answer(
@@ -256,74 +244,76 @@ class DailyQuest:
             )
 
             if type(reward_starcoins_bool) in [float, int]:
-                await message.answer(
-                    text=texts.Quests.Texts.fast_approve.format(
-                        starcoins=reward_starcoins_bool
-                    ),
-                    reply_markup=await reply.main_menu(user),
+                text = texts.Quests.Texts.fast_approve.format(
+                    starcoins=reward_starcoins_bool
                 )
             else:
                 """NOTE
                 Вот тут мы отправляем на проверку
                 """
-                await message.answer(
-                    text=texts.Quests.Texts.idea_send_admins,
-                    reply_markup=await reply.main_menu(user),
-                )
+                text = texts.Quests.Texts.idea_send_admins.format(state_data["title"])
+                
+            await message.answer(
+                text=text
+            )
+            
+            await Menu().main_menu(
+                message,
+                user
+            )
+            
+            # await MessageManager(
+            #     message,
+            #     user.user_id
+            # ).send_or_edit(
+            #     text,
+            #     await selector.main_menu(user),
+            #     "menu"
+            # )
 
         except ListLengthChangedError:
             pass
         except NoDesiredTypeError:
             await state.set_state(Daily.wait)
-        except:
-            logger.exception("Неизвестная ошибка")
-            await message.answer(text=texts.Error.Notif.undefined_error)
-            return
 
     async def fast_success(
         self, call: types.CallbackQuery, user: Users, quest_id: str, title: str
     ) -> Optional[bool]:
-        # target_user = await UserMethods().get_by_user_id(user.user_id)
-
-        reward_starcoins = await UseQuestsMethods().create_idea_daily(user.id, quest_id)
+        reward_starcoins = await UseQuestsMethods().create_idea_daily(
+            user.id,
+            quest_id,
+            idempotency_key=await IdempotencyKeyMethods.IKgenerate(user.user_id, call.message)
+        )
         if not reward_starcoins:
-            await call.bot.send_message(
-                chat_id=user.user_id,
+            await call.answer(
                 text=texts.Error.Notif.server_error,
+                show_alert=True
             )
             return
 
-        try:
-            # await call.answer(
-            #     text=f"✅ +{reward_starcoins}★ ✅"
-            #     )
-            await call.bot.send_message(
-                chat_id=user.user_id,
-                text=texts.Quests.Texts.fast_approve.format(starcoins=reward_starcoins),
-            )
-        except:
-            pass
-        try:
-            await call.bot.send_message(
-                chat_id=config.quests_chat,
-                text=texts.Quests.Texts.log_idea_success.format(
-                    tg_info=await Func.format_tg_info(user.user_id, user.tg_username),
-                    title_quest=title + f" +{reward_starcoins}★",
-                    role=user.role_name,
-                    gender=await Func.gender_name(user.gender, user.role_private),
-                    age=(datetime.now(pytz.timezone("Europe/Moscow")) - user.age).days
-                    // 365,
-                    title="Имя" if user.role_private == "child" else "ФИО",
-                    supername=user.supername,
-                    name=user.name,
-                    nickname=user.nickname,
-                    phone=user.phone,
-                    created_at=await Func.format_date(user.created_at),
-                    referral_count=await UserMethods().get_referral_count(user.user_id),
-                ),
-            )
-        except:
-            pass
+        await call.bot.send_message(
+            chat_id=user.user_id,
+            text=texts.Quests.Texts.fast_approve.format(starcoins=reward_starcoins),
+        )
+
+        await call.bot.send_message(
+            chat_id=config.quests_chat,
+            text=texts.Quests.Texts.log_idea_success.format(
+                tg_info=await Func.format_tg_info(user.user_id, user.tg_username),
+                title_quest=title + f" +{reward_starcoins}★",
+                role=user.role_name,
+                gender=await Func.gender_name(user.gender, user.role_private),
+                age=(datetime.now(pytz.timezone("Europe/Moscow")) - user.age).days
+                // 365,
+                title="Имя" if user.role_private == "child" else "ФИО",
+                supername=user.supername,
+                name=user.name,
+                nickname=user.nickname,
+                phone=user.phone,
+                created_at=await Func.format_date(user.created_at),
+                referral_count=await UserMethods().get_referral_count(user.user_id),
+            ),
+        )
 
         await RabbitMQ().track_quest(user.user_id, quest_id, action="fast_success")
 
@@ -333,15 +323,13 @@ class DailyQuest:
 class IdeaQuest:
 
     async def get_idea_quest(
-        self, message: types.Message, user: Users, quest_id: int
+        self, call: types.CallbackQuery, user: Users, quest_id: int
     ) -> None:
         quest: Quests = await QuestsMethods().get_by_id(user.user_id, quest_id)
         if not quest:
-            await message.delete()
-            await message.bot.send_message(
-                chat_id=user.user_id,
-                text=texts.Quests.Error.no_quest,
-                reply_markup=await reply.main_menu(user),
+            await call.answer(
+                texts.Quests.Error.no_quest,
+                show_alert=True
             )
         else:
             idea_quest: IdeaQuests = quest.quest_data
@@ -351,20 +339,15 @@ class IdeaQuest:
                 description=idea_quest.description,
                 price=idea_quest.reward_starcoins,
             )
-            try:
-                await message.edit_text(
-                    text=text,
-                    reply_markup=await inline.idea_quest(quest.id),
-                    disable_web_page_preview=True,
-                )
-            except:
-                await message.bot.send_message(
-                    chat_id=user.user_id,
-                    text=text,
-                    reply_markup=await inline.idea_quest(quest.id),
-                    disable_web_page_preview=True,
-                )
-                await message.delete()
+            
+            await MessageManager(
+                call,
+                user.user_id
+            ).send_or_edit(
+                text,
+                await inline.idea_quest(quest.id),
+                "quests"
+            )
 
     async def action_idea_quest(
         self, call: types.CallbackQuery, state: FSMContext, user: Users, quest_id: int
@@ -375,7 +358,7 @@ class IdeaQuest:
             await call.message.bot.send_message(
                 chat_id=user.user_id,
                 text=texts.Quests.Error.no_quest,
-                reply_markup=await reply.main_menu(user),
+                reply_markup=await selector.main_menu(user),
             )
         else:
             idea_quest: IdeaQuests = quest.quest_data
@@ -383,20 +366,15 @@ class IdeaQuest:
             text = texts.Quests.Texts.idea_call_action.format(
                 call_action=idea_quest.call_action
             )
-            try:
-                await call.message.edit_text(
-                    text=text,
-                    reply_markup=await reply.back(idea_quest.title),
-                    disable_web_page_preview=True,
-                )
-            except:
-                await call.message.bot.send_message(
-                    chat_id=user.user_id,
-                    text=text,
-                    reply_markup=await reply.back(idea_quest.title),
-                    disable_web_page_preview=True,
-                )
-                await call.message.delete()
+            
+            await MessageManager(
+                call,
+                user.user_id
+            ).send_or_edit(
+                text,
+                await inline.back(f"get_quest|idea|{quest_id}"),
+                "quests"
+            )
 
             await state.set_state(Idea.wait)
             await state.update_data(
@@ -463,7 +441,8 @@ class IdeaQuest:
             logger.debug(f"{success_admin} -> {user.user_id}")
 
             reward_starcoins_bool = await UseQuestsMethods().create_idea_daily(
-                user.id, state_data["id"]
+                user.id, state_data["id"],
+                idempotency_key=await IdempotencyKeyMethods.IKgenerate(user.user_id, message)
             )
             if not reward_starcoins_bool:
                 await message.answer(
@@ -519,28 +498,37 @@ class IdeaQuest:
             )
 
             if type(reward_starcoins_bool) in [float, int]:
-                await message.answer(
-                    text=texts.Quests.Texts.fast_approve.format(
-                        starcoins=reward_starcoins_bool
-                    ),
-                    reply_markup=await reply.main_menu(user),
+                text = texts.Quests.Texts.fast_approve.format(
+                    starcoins=reward_starcoins_bool
                 )
             else:
                 """NOTE
                 Вот тут мы отправляем на проверку
                 """
-                await message.answer(
-                    text=texts.Quests.Texts.idea_send_admins,
-                    reply_markup=await reply.main_menu(user),
-                )
+                text = texts.Quests.Texts.idea_send_admins.format(state_data["title"])
+
+            await message.answer(
+                text=text
+            )
+            
+            await Menu().main_menu(
+                message,
+                user
+            )
+
+            # await MessageManager(
+            #     message,
+            #     user.user_id
+            # ).send_or_edit(
+            #     text,
+            #     await selector.main_menu(user),
+            #     "menu"
+            # )
 
         except ListLengthChangedError:
             pass
         except NoDesiredTypeError:
             await state.set_state(Idea.wait)
-        except:
-            logger.exception("Неизвестная ошибка")
-            await message.answer(text=texts.Error.Notif.undefined_error)
 
     async def success_idea(
         self, call: types.CallbackQuery, user: Users, quest_id: str, user_id: str
@@ -567,7 +555,7 @@ class IdeaQuest:
 
         try:
             await call.message.delete_reply_markup()
-        except:
+        except: # exceptions.TelegramBadRequest
             await call.answer(text="💡Клавиатура не удалится💡")
 
     async def delete_idea(
@@ -608,7 +596,7 @@ class IdeaQuest:
 
         try:
             await call.message.delete_reply_markup()
-        except:
+        except: # exceptions.TelegramBadRequest
             await call.answer(text="💡Клавиатура не удалится💡")
             await asyncio.sleep(1)
 
@@ -629,7 +617,7 @@ class SubscribeQuests:
             await call.message.bot.send_message(
                 chat_id=user.user_id,
                 text=texts.Quests.Error.no_quest,
-                reply_markup=await reply.main_menu(user),
+                reply_markup=await selector.main_menu(user),
             )
         else:
             """NOTE
@@ -648,20 +636,15 @@ class SubscribeQuests:
                     ),
                     price=sub_quest.reward_starcoins,
                 )
-                try:
-                    await call.message.edit_text(
-                        text=text,
-                        reply_markup=await inline.check_sub(quest.id),
-                        disable_web_page_preview=True,
-                    )
-                except:
-                    await call.message.bot.send_message(
-                        chat_id=user.user_id,
-                        text=text,
-                        reply_markup=await inline.check_sub(quest.id),
-                        disable_web_page_preview=True,
-                    )
-                    await call.message.delete()
+                
+                await MessageManager(
+                    call,
+                    user.user_id
+                ).send_or_edit(
+                    text,
+                    await inline.check_sub(quest.id),
+                    "quests"
+                )
 
                 await call.message.bot.send_message(
                     chat_id=user.user_id, text=sub_quest.url
@@ -675,71 +658,62 @@ class SubscribeQuests:
         """
         Проверка юзера в нужном чате
         """
-        try:
-            quest: Quests = await QuestsMethods().get_by_id(user.user_id, quest_id)
-            if not quest:
-                return False, texts.Quests.Error.no_quest
+        quest: Quests = await QuestsMethods().get_by_id(user.user_id, quest_id)
+        if not quest:
+            return False, texts.Quests.Error.no_quest
 
-            sub_quest = quest.quest_data
+        sub_quest = quest.quest_data
 
-            if sub_quest.type.value == "tg":
-                if quest.type_quest.value != "subscribe" or not isinstance(
-                    sub_quest, SubscribeQuest
-                ):
-                    return False, texts.Error.Notif.undefined_error
+        if sub_quest.type.value == "tg":
+            if quest.type_quest.value != "subscribe" or not isinstance(
+                sub_quest, SubscribeQuest
+            ):
+                return False, texts.Error.Notif.undefined_error
 
-                try:
-                    # Проверяем статус пользователя в чате
-                    chat_member = await call.bot.get_chat_member(
-                        chat_id=sub_quest.chat_id_name, user_id=user.user_id
-                    )
-
-                    # Проверяем, что пользователь не покинул чат
-                    if chat_member.status in ("left", "kicked", "restricted"):
-                        return False, texts.Error.Notif.dont_subscribe
-
-                    return True, quest
-                except:
-                    logger.exception(
-                        "chat_member = await bot.get_chat_member(sub_quest.chat_id_name, user.user_id)"
-                    )
-                    return False, texts.Error.Notif.dont_subscribe
-            elif sub_quest.type.value == "vk":
-                if quest.type_quest.value != "subscribe" or not isinstance(
-                    sub_quest, SubscribeQuest
-                ):
-                    return False, texts.Error.Notif.undefined_error
-
-                if not user.vk_id:
-                    text, keyboard = await VKForms.get_vk_profile_link(state, quest.id)
-                    try:
-                        await call.message.edit_text(
-                            text=text,
-                            reply_markup=keyboard,
-                            disable_web_page_preview=True,
-                        )
-                    except:
-                        await call.message.bot.send_message(
-                            chat_id=user.user_id,
-                            text=text,
-                            reply_markup=keyboard,
-                            disable_web_page_preview=True,
-                        )
-                        await call.message.delete()
-
-                    return False, False
-
-                result: bool = await VKForms.verif_vk_chat(
-                    user.vk_id, sub_quest.chat_id_name, sub_quest.group_token
+            try:
+                # Проверяем статус пользователя в чате
+                chat_member = await call.bot.get_chat_member(
+                    chat_id=sub_quest.chat_id_name, user_id=user.user_id
                 )
 
-                if result:
-                    return True, quest
-                else:
-                    return False, texts.Quests.VK.no_sub
-        except:
-            logger.exception("Ошибка проверки подписки")
-            return False, texts.Error.Notif.undefined_error
+                # Проверяем, что пользователь не покинул чат
+                if chat_member.status in ("left", "kicked", "restricted"):
+                    return False, texts.Error.Notif.dont_subscribe
+
+                return True, quest
+            except: # exceptions.TelegramBadRequest
+                logger.exception(
+                    "chat_member = await bot.get_chat_member(sub_quest.chat_id_name, user.user_id)"
+                )
+                return False, texts.Error.Notif.dont_subscribe
+        elif sub_quest.type.value == "vk":
+            if quest.type_quest.value != "subscribe" or not isinstance(
+                sub_quest, SubscribeQuest
+            ):
+                return False, texts.Error.Notif.undefined_error
+
+            if not user.vk_id:
+                text, keyboard = await VKForms.get_vk_profile_link(state, quest.id)
+                
+                await MessageManager(
+                    call,
+                    user.user_id
+                ).send_or_edit(
+                    text,
+                    keyboard,
+                    "quests"
+                )
+
+                return False, False
+
+            result: bool = await VKForms.verif_vk_chat(
+                user.vk_id, sub_quest.chat_id_name, sub_quest.group_token
+            )
+
+            if result:
+                return True, quest
+            else:
+                return False, texts.Quests.VK.no_sub
 
     async def verif_vk_profile_link(
         self, state: FSMContext, user: Users, url: str
@@ -789,7 +763,7 @@ class SubscribeQuests:
                     ),
                     sub_quest.url,
                 ),
-                (await inline.check_sub(quest_id), await reply.main_menu(user)),
+                (await inline.check_sub(quest_id), await selector.main_menu(user)),
             )
 
     async def success_subscribe_quest(
@@ -802,18 +776,25 @@ class SubscribeQuests:
             if await UseQuestsMethods().get_connection(user, quest):
                 try:
                     await call.message.delete()
-                except:
+                except: # exceptions.TelegramBadRequest
                     pass
                 await call.message.bot.send_message(
                     chat_id=user.user_id, text=texts.Quests.Texts.already
                 )
                 return
 
-        sub_quest = await UseQuestsMethods().create_quest(user, quest)
+        sub_quest = await UseQuestsMethods().create_quest(
+            user,
+            quest,
+            idempotency_key=await IdempotencyKeyMethods().IKgenerate(
+                user.user_id,
+                call.message
+                )
+            )
 
         try:
             await call.message.delete()
-        except:
+        except: # exceptions.TelegramBadRequest
             pass
 
         await call.message.bot.send_message(
@@ -904,7 +885,7 @@ class Quests(SubscribeQuests, IdeaQuest, DailyQuest, QuestPagination):
                         texts.Quests.Error.no_quests,
                     )
                     await call.message.delete()
-                except:
+                except: # exceptions.TelegramBadRequest
                     pass
             return
 
@@ -916,23 +897,19 @@ class Quests(SubscribeQuests, IdeaQuest, DailyQuest, QuestPagination):
         keyboard.inline_keyboard.append(
             [
                 types.InlineKeyboardButton(
-                    text=texts.Btns.back, callback_data="back_to_profile"
+                    text=texts.Btns.back, callback_data="main_menu|back"
                 )
             ]
         )
 
-        if message:
-            await message.bot.send_message(
-                chat_id=user.user_id, text=text, reply_markup=keyboard
-            )
-        else:
-            try:
-                await call.message.edit_text(text=text, reply_markup=keyboard)
-            except:
-                await call.message.bot.send_message(
-                    chat_id=user.user_id, text=text, reply_markup=keyboard
-                )
-                await call.message.delete()
+        await MessageManager(
+            call if call else message,
+            user.user_id
+        ).send_or_edit(
+            text,
+            keyboard,
+            "quests"
+        )
 
     async def action_daily_quest(
         self, call: types.CallbackQuery, state: FSMContext, user: Users, quest_id: int

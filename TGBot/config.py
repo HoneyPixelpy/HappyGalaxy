@@ -14,7 +14,8 @@ log_chat = "-1002565986205" if not debug else "1894909159"
 quests_chat = "-1002933684603" if not debug else "1894909159"
 smm_chat = "-1003000387263" if not debug else "1894909159"
 game_chat = "-1003000387263" if not debug else "1894909159"
-shop_chat = "-1001957873375"
+hg_chat = "-1003258944587" if not debug else "1894909159"
+shop_chat = "-1003684553625" if not debug else "1894909159"
 
 BASE_DIR = Path(__file__).resolve().parent
 

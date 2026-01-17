@@ -1,24 +1,33 @@
-from typing import Optional
+from typing import List, Optional
 
 import texts
 from aiogram import types
 from config import bot_name
 from MainBot.base.models import Family_Ties, RewardData, Users
-from MainBot.base.orm_requests import DataMethods, Family_TiesMethods, UserMethods
-from MainBot.keyboards.reply import KB as reply
+from MainBot.base.orm_requests import DataMethods, Family_TiesMethods, IdempotencyKeyMethods, UserMethods
+from MainBot.utils.MyModule.message import MessageManager
 from MainBot.utils.Forms.Profile import Profile
+from MainBot.keyboards import inline
 
 
 class FamilyTies:
-    """
+    """ Сюда попадают только РОДИТЕЛИ и ДЕТИ
     Нету сообщения который бы постоянно информировал
     о ссылке для приглашения родственников
     """
+    def __init__(self, role_private: str):
+        self.role_private = role_private
+        self.available_roles = ["parent", "child"]
+        self.having_family = False
+    
+    @property
+    def need(self) -> Optional['FamilyTies']:
+        return self if self.role_private in self.available_roles else None
 
-    async def search_ties(self, family: list[Family_Ties], role: str) -> Optional[bool]:
-        if role == "child":
+    async def search_ties(self, family: List[Family_Ties]) -> Optional[bool]:
+        if self.role_private == "child":
             search = "parent"
-        elif role == "parent":
+        elif self.role_private == "parent":
             search = "child"
 
         for family_member in family:
@@ -28,72 +37,62 @@ class FamilyTies:
             ):
                 return True
 
-    async def info_parent(self, user: Users, message: types.Message) -> Optional[bool]:
+    async def check_parent(self, user: Users) -> Optional[bool]:
         """
-        Сюда попадают только РОДИТЕЛИ и ДЕТИ
-
-        Отправляем сообщение для приглашения родственников
-
-        Здесь могут отображаться не зарегестрированные пользователи
-        нужно учитывать тот факт что некоторых данных в базе
-        может не быть
-
         Потом надо разбить на два метода
         - один дает доступ к игре как щас
         - другой выдает инфу о родственниках
-
         """
-        family: list[Family_Ties] = await Family_TiesMethods().get_family(user)
+        family: List[Family_Ties] = await Family_TiesMethods().get_family(user)
+
+        if not family:
+            return None
+
+        self.having_family = True
+        if not await self.search_ties(family):
+            return None
+        
+        return True
+
+    async def info_parent(
+        self,
+        user: Users,
+        call: types.CallbackQuery | types.Message
+        ) -> Optional[bool]:
+        """
+        Отправляем сообщение для приглашения родственников
+        """
         text = ""
-        if not family or not await self.search_ties(family, user.role_private):
-            reward_data: RewardData = await DataMethods().reward()
-            if user.role_private == "child":
+        reward_data: RewardData = await DataMethods().reward()
+        match self.role_private:
+            case "child":
                 text += texts.Family_Ties.Texts.no_family_child
-            elif user.role_private == "parent":
+            case "parent":
                 text += texts.Family_Ties.Texts.no_family_parent
-            # elif user.role_private == "worker":
-            #     text += texts.Family_Ties.Texts.no_family_worker
 
-            text += texts.Family_Ties.Texts.family_link.format(
-                bot_name=bot_name, user_id=user.user_id
+        text += texts.Family_Ties.Texts.family_link.format(
+            bot_name=bot_name, user_id=user.user_id
+        )
+        if not self.having_family:
+            text += texts.Family_Ties.Texts.family_bonus.format(
+                parent_bonus=reward_data.starcoins_parent_bonus
             )
-            if not family:
-                text += texts.Family_Ties.Texts.family_bonus.format(
-                    parent_bonus=reward_data.starcoins_parent_bonus
-                )
 
-            await message.bot.send_message(
-                chat_id=user.user_id,
-                text=text,
-                reply_markup=await reply.main_menu(user),
-                disable_web_page_preview=True,
-            )
-            return
-        # else:
-        #     for family_member in family:
-        #         if await sync_to_async(lambda: family_member.to_user)() == user:
-        #             fm_user = await sync_to_async(lambda: family_member.from_user)()
-        #         else:
-        #             fm_user = await sync_to_async(lambda: family_member.to_user)()
-        #         text += texts.Family_Ties.Texts.family_member_info.format(
-        #             role=fm_user.role,
-        #             supername=fm_user.supername,
-        #             name=fm_user.name,
-        #             starcoins=fm_user.starcoins
-        #         )
-        #     else:
-        #         text += texts.Family_Ties.Texts.footer_family.format(
-        #             bot_name=bot_name,
-        #             user_id=user.user_id
-        #         )
+        await MessageManager(
+            call,
+            user.user_id
+        ).send_or_edit(
+            text,
+            await inline.back_to_main(),
+            "game"
+        )
 
-        # await message.bot.send_message(
+        # await call.bot.send_message(
         #     chat_id=user.user_id,
         #     text=text,
-        #     reply_markup=await reply.main_menu(user),
-        #     disable_web_page_preview=True
+        #     reply_markup=await selector.main_menu(user),
+        #     disable_web_page_preview=True,
         # )
-        return True
 
     async def add_parent(
         self, message: types.Message, user: Users, parent_user_id: str
@@ -125,7 +124,9 @@ class FamilyTies:
                     parent_user=parent_user, user=user
                 ):
                     await Family_TiesMethods().create(
-                        from_user=parent_user, to_user=user
+                        from_user=parent_user,
+                        to_user=user,
+                        idempotency_key=await IdempotencyKeyMethods.IKgenerate(user.user_id, message)
                     )
                     await Profile().notification_parent(message, user, parent_user)
                 else:

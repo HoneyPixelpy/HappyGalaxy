@@ -105,8 +105,11 @@ class UserMethods:
     def complete_registration(
         cls, user: Users, state_data: Dict, rollback: Optional[bool]
     ) -> Response:
-        """Завершить регистрацию пользователя"""
-        if state_data["role"] in ["worker", "manager"] and not rollback:
+        """
+        Завершить регистрацию пользователя
+        Даем энергию детям и родителям также
+        """
+        if state_data["role"] in ["parent", "child", "worker", "manager"] and not rollback:
             game_user = Lumberjack_Game.objects.filter(user=user).first()
             if game_user and not game_user.max_energy:
                 game_user.max_energy = boosts_data.energy_capacity_level.value_by_level(
@@ -281,8 +284,39 @@ class UserMethods:
     @classmethod
     def delete_purch(cls, user: Users, cost: float) -> None:
         user.purchases -= 1
+        
+        logger.info(
+            "Change Balance: UserID:{0} |Old Balance:{1} |New Balance:{2} |Edit:{3}".format(
+                user.user_id, user._starcoins, user._starcoins + cost, cost
+            )
+        )
         user._starcoins += cost
+        
         user.save()
+
+    @classmethod
+    def get_list_all_starcoins(cls) -> List[Dict[str, int]]:
+        """
+        Возвращает все Users для user:
+        [{'all_starcoins': 5, 'user_id': 123}, {'all_starcoins': 3, 'user_id': 456}, ...]
+        Сортировка: all_starcoins DESC, updated_at DESC
+        """
+        queryset = Users.objects.values(
+            'all_starcoins', 'user_id'
+        ).order_by('-all_starcoins', '-updated_at')
+        
+        return list(queryset)  # Пустой список [], если ничего не найдено
+
+    @classmethod
+    def get_users_referral_ids(cls) -> List[Dict[str,int]]:
+        """
+        Возвращаем все referral_user_id
+        """
+        data = Users.objects.filter(
+            referral_user_id__isnull=False,
+            authorised=True
+        ).values('referral_user_id')
+        return list(data)
 
 
 class ReferralConnectionsMethods:

@@ -34,7 +34,7 @@ async def gen_text_callback(call: types.CallbackQuery, state: FSMContext):
             "<b>🚀 Генерация Текста\n\n✏️ Напишите Ваш запрос:</b>",
             reply_markup=main_menu(),
         )
-    except:
+    except: # exceptions.TelegramBadRequest
         await call.bot.send_message(
             chat_id=call.from_user.id,
             text="<b>🚀 Генерация Текста\n\n✏️ Напишите Ваш запрос:</b>",
@@ -51,7 +51,7 @@ async def gen_image_callback(call: types.CallbackQuery, state: FSMContext):
             "<b>🚀 Генерация Картинки\n\n✏️ Напишите Ваш запрос:</b>",
             reply_markup=main_menu(),
         )
-    except:
+    except: # exceptions.TelegramBadRequest
         await call.bot.send_message(
             chat_id=call.from_user.id,
             text="<b>🚀 Генерация Картинки\n\n✏️ Напишите Ваш запрос:</b>",

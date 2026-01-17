@@ -10,6 +10,8 @@ from .Quests import Quests
 from .Season import Season
 from .Shop import Shop
 from .UTMLinks import UTMLinksForm
+from .Rating import RatingForms
+from .Menu import Menu
 
 __all__ = [
     "Authorisation",
@@ -24,4 +26,6 @@ __all__ = [
     "Season",
     "Shop",
     "UTMLinksForm",
+    "RatingForms",
+    "Menu",
 ]

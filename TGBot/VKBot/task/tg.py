@@ -90,7 +90,7 @@ class TelegramSubscriptionChecker:
                 return False
             else:
                 return True
-        except:
+        except: # exceptions.TelegramBadRequest
             logger.exception(
                 "chat_member = await bot.get_chat_member(chat_name, user_id)"
             )

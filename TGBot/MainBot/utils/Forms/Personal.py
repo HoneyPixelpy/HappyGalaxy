@@ -8,8 +8,7 @@ from aiogram.fsm.context import FSMContext
 from MainBot.base.forms import UsersForms
 from MainBot.base.models import Users, Work_Keys
 from MainBot.base.orm_requests import Work_KeysMethods
-from MainBot.keyboards.inline import IKB as inline
-from MainBot.keyboards.reply import KB as reply
+from MainBot.keyboards import inline, reply
 from MainBot.state.state import RegPersonal
 from MainBot.utils.MyModule import Func
 
@@ -272,6 +271,6 @@ class PersonalForms:
             return
 
         await Profile().new_user_in_log(call.message.bot, user)
-        await Profile().user_info_msg(call.message.bot, user, call.message.message_id)
+        await Profile().user_info_msg(call, user)
 
         await state.clear()

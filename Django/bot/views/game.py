@@ -1,5 +1,5 @@
 from datetime import datetime, timedelta
-from typing import List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union
 
 import pytz
 from bot.schemas.game import BoostData
@@ -625,6 +625,14 @@ class LumberjackGameViewMethods(GameView, AbstractLumberjackGame, AbstractGame):
         """
         super().restore_energy(game_user, game_user_two)
 
+    @classmethod
+    def get_list_correct_clicks(cls) -> List[Lumberjack_Game]:
+        return Lumberjack_Game.objects.filter(
+            total_clicks__gte=0
+        ).values(
+            "user__user_id", "total_clicks"
+        ).order_by('-total_clicks', '-updated_at')
+
 
 class GeoHunterViewMethods(GameView, AbstractGame):
     @classmethod
@@ -701,6 +709,14 @@ class GeoHunterViewMethods(GameView, AbstractGame):
         Восстанавливает энергию игрока
         """
         super().restore_energy(game_user, game_user_two)
+
+    @classmethod
+    def get_list_correct_answers(cls) -> List[Dict]:
+        return GeoHunter.objects.filter(
+            total_true__gte=0
+        ).values(
+            "total_true", "user__user_id"
+        ).order_by('-total_true', '-updated_at')
 
 
 # NOTE новая фича

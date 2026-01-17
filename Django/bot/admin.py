@@ -110,6 +110,7 @@ class Pikmi_ShopAdmin(admin.ModelAdmin):
         "role",
         "_price",
         "quantity",
+        "delivery_instructions",
     )
     list_filter = ("role",)
     list_editable = (
@@ -137,6 +138,7 @@ class PurchasesAdmin(admin.ModelAdmin):
         "user",
         "_purchase_date",
         "_cost",
+        "delivery_data",
         "completed",
         "_completed_at",
     )
@@ -153,6 +155,7 @@ class PurchasesAdmin(admin.ModelAdmin):
         "title",
         "description",
         "_cost",
+        "delivery_data",
         "_completed_at",
     )
     list_editable = ("completed",)

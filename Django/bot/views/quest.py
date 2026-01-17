@@ -1,14 +1,15 @@
 from datetime import timedelta
-from typing import Any, List, Optional, Union
+from typing import Any, Dict, List, Optional, Union
 
 import pytz
-from django.db.models import Q
+from django.db.models import Q, Sum
 from django.utils import timezone
 from loguru import logger
 from rest_framework import status
 from rest_framework.response import Response
 
 from ..models import (
+    DailyQuests,
     QuestModerationAttempt,
     Quests,
     Rangs,
@@ -39,6 +40,25 @@ class QuestMethods:
         except Quests.DoesNotExist:
             raise RaisesResponse(
                 data={"error": "Quests not found"}, status=status.HTTP_404_NOT_FOUND
+            )
+
+    @classmethod
+    def get_dont_go(cls) -> Quests:
+        try:
+            daily = DailyQuests.objects.get(
+                title="Не ухАди"
+            )
+            return Quests.objects.get(
+                object_id=daily.id,
+                type_quest="daily"
+            )
+        except Quests.DoesNotExist:
+            raise RaisesResponse(
+                data={"error": "Quests not found"}, status=status.HTTP_404_NOT_FOUND
+            )
+        except DailyQuests.DoesNotExist:
+            raise RaisesResponse(
+                data={"error": "Daily not found"}, status=status.HTTP_404_NOT_FOUND
             )
 
     @classmethod
@@ -363,6 +383,34 @@ class UseQuestMethods:
         logger.info(f"Сняли за отпуску ТГ {quest.quest_data.reward_starcoins} у {user}")
 
         raise RaisesResponse(data=True, status=status.HTTP_200_OK)
+
+    @classmethod
+    def get_all_daily_login(cls, quest: Quests) -> List[Dict[str, int]]:
+        """
+        Возвращает все UseQuests для quest:
+        [{'count_use': 5, 'user_id': 123}, {'count_use': 3, 'user_id': 456}, ...]
+        Сортировка: count_use DESC, updated_at DESC
+        """
+        queryset = UseQuests.objects.filter(quest=quest).select_related('user').values(
+            'count_use', 'user__user_id'
+        ).order_by('-count_use', '-updated_at')
+        
+        return list(queryset)  # Пустой список [], если ничего не найдено
+
+    @classmethod
+    def get_all_completed_quests(cls, exclude_quest: Quests) -> List[Dict[str, int]]:
+        """
+        Сумма count_use всех квестов кроме exclude_quest по каждому пользователю.
+        [{'user_id': 123, 'total_count': 25}, {'user_id': 456, 'total_count': 18}]
+        Сортировка: total_count DESC
+        """
+        queryset = UseQuests.objects.exclude(
+            quest=exclude_quest
+        ).values(
+            'user__user_id', 'count_use'
+        )
+
+        return list(queryset)
 
 
 class Quest_MA_Methods:

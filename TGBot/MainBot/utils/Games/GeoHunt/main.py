@@ -78,7 +78,7 @@ class FlagProcessor:
                 self.translation_cache[english_name] = translated
                 self._save_cache(self.translation_cache, self.translation_cache_file)
                 return translated
-        except Exception as e:
+        except Exception as e: # Translation
             logger.error(f"Translation error for '{english_name}': {e}")
 
         return None
@@ -101,7 +101,7 @@ class FlagProcessor:
                 self.message_ids_cache[flag_path] = file_id
                 self._save_cache(self.message_ids_cache, self.cache_file)
                 return file_id
-        except Exception as e:
+        except Exception as e: # File
             logger.error(f"Error uploading media {flag_path}: {e}")
 
         return None
@@ -120,7 +120,7 @@ class FlagProcessor:
             )
             # Возвращаем наибольшее доступное фото (последний элемент в списке)
             return message.photo[-1] if message.photo else None
-        except Exception as e:
+        except Exception as e: # exceptions.TelegramBadRequest
             logger.error(f"Error in _upload_media: {e}")
             return None
 
@@ -322,19 +322,15 @@ class Build(Flag):
                     reply_markup=keyboard,
                 )
                 return message.message_id
-            except:
+            except: # exceptions.TelegramBadRequest
                 message_data = await message.bot.send_photo(
                     chat_id=user.user_id,
                     photo=photo,
                     caption=text,
                     reply_markup=keyboard,
                 )
-                # try:
-                #     await message.delete()
-                # except:
-                #     logger.exception("Нету сообщения для удаления")
                 return message_data.message_id
-        except:
+        except: # exceptions.TelegramBadRequest
             logger.exception("2")
             return message.message_id
 
@@ -420,7 +416,7 @@ class GeoHuntMain(Build):
             try:
                 win_starcoins = round((game_user.user.starcoins - user.starcoins), 2)
                 await call.answer(texts.Game.GeoHunt.yes.format(win=win_starcoins))
-            except:
+            except: # exceptions.TelegramBadRequest
                 pass
 
             if data["first_click"]:
@@ -433,7 +429,7 @@ class GeoHuntMain(Build):
                 await call.answer(
                     texts.Game.GeoHunt.no.format(name=true_var.get("title"))
                 )
-            except:
+            except: # exceptions.TelegramBadRequest
                 pass
 
         return game_user
@@ -453,45 +449,40 @@ class GeoHuntMonitoring(GeoHuntMain):
         user: Users,
         geo_hunter: Optional[GeoHunter],
         message_id: int,
-    ):
-        try:
-            user_id = user.user_id
-            bot = call.bot
-            redis_client = await self.redis.get_redis()
+    ) -> None:
+        user_id = user.user_id
+        bot = call.bot
+        redis_client = await self.redis.get_redis()
 
-            await asyncio.sleep(self.GEO_HUNT_TIMEOUT)
+        await asyncio.sleep(self.GEO_HUNT_TIMEOUT)
 
-            session_data = await redis_client.hgetall(f"geo_hunt_session:{user_id}")
-            if session_data:
-                timeout_counter = (
-                    int(session_data.get(b"timeout_counter", b"0").decode()) + 1
-                )
+        session_data = await redis_client.hgetall(f"geo_hunt_session:{user_id}")
+        if session_data:
+            timeout_counter = (
+                int(session_data.get(b"timeout_counter", b"0").decode()) + 1
+            )
 
-                await bot.delete_message(chat_id=user_id, message_id=message_id)
-                await bot.send_message(
-                    chat_id=user_id, text=texts.Game.GeoHunt.time_over
-                )
+            await bot.delete_message(chat_id=user_id, message_id=message_id)
+            await bot.send_message(
+                chat_id=user_id, text=texts.Game.GeoHunt.time_over
+            )
 
-                await redis_client.delete(f"geo_hunt_session:{user_id}")
+            await redis_client.delete(f"geo_hunt_session:{user_id}")
 
-                # Проверяем, достигнут ли лимит
-                if timeout_counter >= self.MAX_TIMEOUT_COUNT:
-                    from .. import LumberjackGame
+            # Проверяем, достигнут ли лимит
+            if timeout_counter >= self.MAX_TIMEOUT_COUNT:
+                from .. import LumberjackGame
 
-                    await LumberjackGame().msg_before_game(call.message)
-                else:
-                    await self.get_field(
-                        call,
-                        user,
-                        geo_hunter,
-                        new_msg=True,
-                        timeout_counter=timeout_counter,
-                    )  # передаем обновленный счетчик
+                await LumberjackGame().msg_before_game(user, call)
+            else:
+                await self.get_field(
+                    call,
+                    user,
+                    geo_hunter,
+                    new_msg=True,
+                    timeout_counter=timeout_counter,
+                )  # передаем обновленный счетчик
 
-        except asyncio.CancelledError:
-            pass
-        except Exception as e:
-            pass
 
     async def get_field(
         self,
@@ -655,9 +646,6 @@ class LockManager(GeoHuntMonitoring):
                 await super().handle_click(call, user)
 
         except asyncio.TimeoutError:
-            await call.answer("⌛️")
-        except Exception as e:
-            logger.error(f"Error in geo_hunt_click: {e}")
             await call.answer("⌛️")
 
 

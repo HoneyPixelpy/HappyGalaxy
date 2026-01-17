@@ -58,7 +58,7 @@ class EnergyUpdateManager:
                 await Func.send_error_to_developer(
                     "Задачи для восстановления энергии запустились!!!"
                 )
-        except:
+        except: # Safe
             await Func.send_error_to_developer(
                 "Задачи для восстановления энергии не запустились"
             )
@@ -135,9 +135,6 @@ class EnergyUpdateManager:
 
         except asyncio.CancelledError:
             logger.debug("Задача была отменена через force_update_energy")
-        except Exception as e:
-            logger.exception(f"Ошибка в wait_and_update_energy: {e}")
-            raise
 
     async def force_update_energy(self, user: Users) -> None:
         """
@@ -165,5 +162,5 @@ class EnergyUpdateManager:
             from MainBot.config import bot
 
             await bot.send_message(chat_id=user.user_id, text=texts.Game.Texts.notif)
-        except Exception as e:
+        except Exception as e: # exceptions.TelegramBadRequest
             logger.exception(f"Ошибка при отправке уведомления: {e}")

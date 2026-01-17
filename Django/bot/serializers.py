@@ -155,7 +155,7 @@ class PikmiShopSerializer(BaseSerializer):
 
     class Meta:
         model = Pikmi_Shop
-        fields = ["id", "title", "description", "price", "role", "quantity"]
+        fields = "__all__"
         extra_kwargs = {"_price": {"write_only": True}}  # Скрываем приватное поле
 
     def get_price(self, obj):

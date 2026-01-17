@@ -24,15 +24,12 @@ class Sigma_BoostsForms:
         """
         Делаем прокачку буста
         """
-        try:
-            upgrade_data = await Sigma_BoostsMethods().upgrade_boost(user, name)
-            if not upgrade_data:
-                logger.warning(f"Пользователь не может улучшить буст {user.user_id}")
-                return
-            upgrade_data["user"] = Users(**upgrade_data["user"])
-            return upgrade_data
-        except:
-            logger.exception("Ошибка при улучшении буста")
+        upgrade_data = await Sigma_BoostsMethods().upgrade_boost(user, name)
+        if not upgrade_data:
+            logger.warning(f"Пользователь не может улучшить буст {user.user_id}")
+            return
+        upgrade_data["user"] = Users(**upgrade_data["user"])
+        return upgrade_data
 
 
 class Lumberjack_GameForms:

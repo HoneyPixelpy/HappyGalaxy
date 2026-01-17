@@ -6,6 +6,142 @@ from aiogram import types
 
 class IKB:
     @classmethod
+    async def main_menu(
+        cls, *args, **kwargs
+    ) -> types.InlineKeyboardMarkup:
+        keyboard = []
+        keyboard.extend((
+            [
+                types.InlineKeyboardButton(
+                    text=texts.Btns.profile,
+                    callback_data="main_menu|profile"
+                )
+            ],
+            [
+                types.InlineKeyboardButton(
+                    text=texts.Btns.game,
+                    callback_data="main_menu|game"
+                ),
+                types.InlineKeyboardButton(
+                    text=texts.Btns.quests,
+                    callback_data="main_menu|quests"
+                )
+            ],
+            [
+                types.InlineKeyboardButton(
+                    text=texts.Btns.invite_friend,
+                    callback_data="main_menu|invite_friend"
+                )
+            ],
+            [
+                types.InlineKeyboardButton(
+                    text=texts.Btns.shop,
+                    callback_data="main_menu|shop"
+                )
+            ],
+            [
+                types.InlineKeyboardButton(
+                    text=texts.Btns.rang,
+                    callback_data="main_menu|rang"
+                ),
+                types.InlineKeyboardButton(
+                    text=texts.Btns.rating,
+                    callback_data="main_menu|rating"
+                )
+            ],
+            [
+                types.InlineKeyboardButton(
+                    text=texts.Btns.help,
+                    callback_data="main_menu|help"
+                )
+            ],
+            [
+                types.InlineKeyboardButton(
+                    text=texts.Btns.who_are_we,
+                    url="https://t.me/happiness34vlz/102"
+                )
+            ]
+        ))
+        return types.InlineKeyboardMarkup(inline_keyboard=keyboard)
+
+    @classmethod
+    async def rating_menu(
+        cls
+    ) -> types.InlineKeyboardMarkup:
+        keyboard = []
+        keyboard.extend((
+            [
+                types.InlineKeyboardButton(
+                    text=texts.Rating.Btns.daily_login,
+                    callback_data="rating_menu|daily_login"
+                ),
+            ],
+            [
+                types.InlineKeyboardButton(
+                    text=texts.Rating.Btns.collect_starcoins,
+                    callback_data="rating_menu|collect_starcoins"
+                )
+            ],
+            [
+                types.InlineKeyboardButton(
+                    text=texts.Rating.Btns.guess_country,
+                    callback_data="rating_menu|guess_country"
+                ),
+            ],
+            [
+                types.InlineKeyboardButton(
+                    text=texts.Rating.Btns.make_clicks,
+                    callback_data="rating_menu|make_clicks"
+                )
+            ],
+            [
+                types.InlineKeyboardButton(
+                    text=texts.Rating.Btns.completed_quests,
+                    callback_data="rating_menu|completed_quests"
+                ),
+            ],
+            [
+                types.InlineKeyboardButton(
+                    text=texts.Rating.Btns.invited_friends,
+                    callback_data="rating_menu|invited_friends"
+                )
+            ],
+            [
+                types.InlineKeyboardButton(
+                    text=texts.Btns.back,
+                    callback_data="main_menu|back"
+                )
+            ]
+        ))
+        return types.InlineKeyboardMarkup(inline_keyboard=keyboard)
+
+    @classmethod
+    async def rating_back(cls) -> types.InlineKeyboardMarkup:
+        return types.InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    types.InlineKeyboardButton(
+                        text=texts.Btns.back,
+                        callback_data="main_menu|rating"
+                    )
+                ]
+            ]
+        )
+
+    @classmethod
+    async def back_to_main(cls) -> types.InlineKeyboardMarkup:
+        return types.InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    types.InlineKeyboardButton(
+                        text=texts.Btns.back,
+                        callback_data="main_menu|back"
+                    )
+                ]
+            ]
+        )
+
+    @classmethod
     async def sure_role(cls, role: str) -> types.InlineKeyboardMarkup:
         return types.InlineKeyboardMarkup(
             inline_keyboard=[
@@ -99,24 +235,6 @@ class IKB:
             ]
         )
 
-    # @classmethod
-    # async def success_fio(cls) -> types.InlineKeyboardMarkup:
-    #     return types.InlineKeyboardMarkup(
-    #             inline_keyboard=[
-    #                 [
-    #                     types.InlineKeyboardButton(
-    #                         text=texts.Start.Btns.yes,
-    #                         callback_data="success_fio|yes"
-    #                     )
-    #                 ],
-    #                 [
-    #                     types.InlineKeyboardButton(
-    #                         text=texts.Start.Btns.other,
-    #                         callback_data="success_fio|other"
-    #                     )
-    #                 ]
-    #             ]
-    #         )
     @classmethod
     async def data_validation(cls, role: str) -> types.InlineKeyboardMarkup:
         return types.InlineKeyboardMarkup(
@@ -168,7 +286,7 @@ class IKB:
         inline_keyboard.append(
             [
                 types.InlineKeyboardButton(
-                    text=texts.Btns.exit, callback_data="back_to_profile"
+                    text=texts.Btns.exit, callback_data="main_menu|back"
                 )
             ]
         )
@@ -252,6 +370,40 @@ class IKB:
         )
 
     @classmethod
+    async def confirm_buy(
+        cls
+    ) -> types.InlineKeyboardMarkup:
+        return types.InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    types.InlineKeyboardButton(
+                        text=texts.Btns.yes,
+                        callback_data="confirm_buy|yes"
+                    ),
+                    types.InlineKeyboardButton(
+                        text=texts.Btns.no,
+                        callback_data="confirm_buy|no"
+                    ),
+                ]
+            ]
+        )
+
+    @classmethod
+    async def rollback_buy(
+        cls, purchases_id: int
+    ) -> types.InlineKeyboardMarkup:
+        return types.InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    types.InlineKeyboardButton(
+                        text=texts.Btns.rollback,
+                        callback_data=f"rollback_buy|{purchases_id}"
+                    ),
+                ]
+            ]
+        )
+
+    @classmethod
     async def success_buy(
         cls, purchases_id: int
     ) -> types.InlineKeyboardMarkup:
@@ -299,7 +451,7 @@ class IKB:
     #                 ]
     #             ]
     #         )
-    @classmethod
+    @classmethod # NOTE DELETE
     async def back_to_profile(cls) -> types.InlineKeyboardMarkup:
         return types.InlineKeyboardMarkup(
             inline_keyboard=[
@@ -359,18 +511,18 @@ class IKB:
             ]
         )
 
-    # @classmethod
-    # async def back_idea_quest(cls, quest_id: int, type_quest: str) -> types.InlineKeyboardMarkup:
-    #     return types.InlineKeyboardMarkup(
-    #             inline_keyboard=[
-    #                 [
-    #                     types.InlineKeyboardButton(
-    #                         text=texts.Btns.back,
-    #                         callback_data=f"get_quest|{type_quest}|{quest_id}"
-    #                     )
-    #                 ]
-    #             ]
-    #         )
+    @classmethod
+    async def back(cls, callback_data: str) -> types.InlineKeyboardMarkup:
+        return types.InlineKeyboardMarkup(
+                inline_keyboard=[
+                    [
+                        types.InlineKeyboardButton(
+                            text=texts.Btns.back,
+                            callback_data=callback_data
+                        )
+                    ]
+                ]
+            )
     @classmethod
     async def verif_idea_admin(
         cls, quest_id: int, user_id: int

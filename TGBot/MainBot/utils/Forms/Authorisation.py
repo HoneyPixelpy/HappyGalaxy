@@ -1,4 +1,6 @@
 import asyncio
+import os
+import random
 import re
 from datetime import datetime
 from typing import List, Optional, Tuple, Union
@@ -13,8 +15,7 @@ from loguru import logger
 from MainBot.base.forms import UsersForms
 from MainBot.base.models import Users
 from MainBot.base.orm_requests import UserMethods
-from MainBot.keyboards.inline import IKB as inline
-from MainBot.keyboards.reply import KB as reply
+from MainBot.keyboards import inline, reply
 from MainBot.state.state import Auth_state
 from MainBot.utils.MyModule import Func, load_config_from_forwards
 
@@ -42,15 +43,15 @@ class Authorisation:
                     await bot.send_sticker(
                         chat_id=user_id, sticker=message_data["message_key"]
                     )
-                except Exception as e:
-                    logger.error(f"No {e.__class__.__name__}: {e}")
+                except Exception as ex: # exceptions.TelegramBadRequest
+                    logger.error(f"No {ex.__class__.__name__}: {ex}")
             elif message_data["type"] == "text":
                 try:
                     await bot.send_message(
                         chat_id=user_id, text=message_data["message_key"]
                     )
-                except Exception as e:
-                    logger.error(f"No {e.__class__.__name__}: {e}")
+                except Exception as ex: # exceptions.TelegramBadRequest
+                    logger.error(f"No {ex.__class__.__name__}: {ex}")
             await asyncio.sleep(message_data["time"])
 
     @classmethod
@@ -270,37 +271,34 @@ class Authorisation:
         Для детей и родителей разные диапазоны
         при несоответсвии выбиваем ошибку
         """
-        try:
-            if len(birthday.strip().split(".")) == 3:
-                tz = pytz.timezone("Europe/Moscow")
-                date_now = datetime.now(tz)
-                birthdate = datetime.strptime(birthday, "%d.%m.%Y")
-                birthdate = tz.localize(birthdate)  # Добавляем временную зону
-                human_years = (date_now - birthdate).days // 365
+        if len(birthday.strip().split(".")) == 3:
+            tz = pytz.timezone("Europe/Moscow")
+            date_now = datetime.now(tz)
+            birthdate = datetime.strptime(birthday, "%d.%m.%Y")
+            birthdate = tz.localize(birthdate)  # Добавляем временную зону
+            human_years = (date_now - birthdate).days // 365
 
-                state_data = await state.get_data()
-                if state_data["role"] == "child":
-                    if human_years < 10:
-                        return False, texts.Error.Age.young
-                    elif human_years > 16:
-                        return False, texts.Error.Age.old
-                    else:
-                        return True, birthdate
-                elif state_data["role"] == "parent":
-                    if human_years < 18:
-                        return False, texts.Error.Age.parent
-                    else:
-                        return True, birthdate
-                elif state_data["role"] == "worker":
-                    if human_years < 16:
-                        return False, texts.Error.Age.parent
-                    else:
-                        return True, birthdate
+            state_data = await state.get_data()
+            if state_data["role"] == "child":
+                if human_years < 10:
+                    return False, texts.Error.Age.young
+                elif human_years > 16:
+                    return False, texts.Error.Age.old
+                else:
+                    return True, birthdate
+            elif state_data["role"] == "parent":
+                if human_years < 18:
+                    return False, texts.Error.Age.parent
+                else:
+                    return True, birthdate
+            elif state_data["role"] == "worker":
+                if human_years < 16:
+                    return False, texts.Error.Age.parent
                 else:
                     return True, birthdate
             else:
-                raise Exception("Неправильный формат даты рождения")
-        except:
+                return True, birthdate
+        else:
             return False, texts.Error.Age.wrong
 
     @classmethod
@@ -626,8 +624,8 @@ class Authorisation:
         """
         errors = []
         cleaned_phone = re.sub(r"[^\d]", "", phone)  # Удаляем всё, кроме цифр
-        # if os.getenv("DEBUG"):
-        #     cleaned_phone = f"7961058{random.randint(1000, 9999)}"
+        if os.getenv("DEBUG"):
+            cleaned_phone = f"7961058{random.randint(1000, 9999)}"
 
         # Проверка длины
         if len(cleaned_phone) != 11:
@@ -739,6 +737,6 @@ class Authorisation:
                 user = await UserMethods().get_by_user_id(user.user_id)
 
         await Profile().new_user_in_log(call.message.bot, user)
-        await Profile().user_info_msg(call.message.bot, user, call.message.message_id)
+        await Profile().user_info_msg(call, user)
 
         await state.clear()

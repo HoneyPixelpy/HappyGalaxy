@@ -1,34 +1,56 @@
-name: Django tests
-
+name: Django Tests
 on:
-  push:
-    branches: [ main ]
-  pull_request:
-    branches: [ main ]
+  # push:
+  #   branches: [ main, multiservice/main ]
+  # pull_request:
+  #   branches: [ main ]
+  workflow_dispatch:  # Если хотите запускать вручную из GitHub UI
 
 jobs:
-  tests:
+  run-tests:
     runs-on: ubuntu-latest
 
-    services:
-      docker:
-        image: docker:stable-dind
-        privileged: true
+    env:
+        ALLOWED_HOSTS: ${{ secrets.ALLOWED_HOSTS }}
+        REDIS_URL: ${{ secrets.REDIS_URL }}
+        SECRET_KEY: ${{ secrets.SECRET_KEY }}
+        POSTGRES_DB: ${{ secrets.POSTGRES_DB }}
+        POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
+        POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+        POSTGRES_HOST: ${{ secrets.POSTGRES_HOST }}
+        POSTGRES_PORT: ${{ secrets.POSTGRES_PORT }}
+        DEBUG: ${{ secrets.DEBUG }}
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Docker
+        uses: docker/setup-docker-action@v3
+        with:
+          docker-version: '24.0'
 
-      - name: Set up Docker Compose
+      - name: Start containers
         run: |
-          docker compose version || docker-compose version || true
+          docker-compose up -d django analytic_consumer
 
-      - name: Start django (with deps)
-        run: |
-          docker-compose up -d --build django
-          # дождаться, пока контейнер здоров
+          sleep 10
+
+          echo "Waiting for PostgreSQL to be ready..."
+          timeout 60s bash -c 'until docker-compose exec postgres pg_isready -U ${POSTGRES_USER:-postgres}; do sleep 2; done'
+
           docker-compose ps
-          docker-compose logs django
 
-      - name: Run pytest inside container
+      - name: Run Django migrations
         run: |
-          docker-compose exec -T django pytest
+          # Применяем миграции для тестовой БД
+          docker-compose exec django python manage.py migrate --noinput
+
+      - name: Run pytest in Django container
+        run: |
+          docker-compose exec django pytest -v
+
+      - name: Cleanup
+        if: always()  # Выполнять даже если тесты упали
+        run: |
+          docker-compose down -v

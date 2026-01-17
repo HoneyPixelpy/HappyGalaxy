@@ -4,13 +4,14 @@ from html import escape
 from typing import Any, AsyncGenerator, Coroutine, List, Optional, Tuple
 
 import pytz
+from MainBot.utils.MyModule.message import MessageManager
 import texts
 from aiogram import Bot, exceptions, types
-from config import bot_name, log_chat, photo_id
+from config import bot_name, log_chat
 from loguru import logger
 from MainBot.base.models import RewardData, Users
 from MainBot.base.orm_requests import DataMethods, PurchasesMethods, UserMethods
-from MainBot.keyboards.reply import KB as reply
+from MainBot.keyboards import inline, reply, selector
 from MainBot.utils.Forms.Season import Season
 from MainBot.utils.MyModule import Func
 
@@ -46,21 +47,26 @@ class Profile:
             disable_web_page_preview=True,
         )
 
-    async def user_info_msg(self, bot: Bot, user: Users, message_id: int) -> None:
+    async def user_info_msg(
+        self,
+        message: types.Message | types.CallbackQuery,
+        user: Users
+    ) -> None:
         """
         Отправляем сообщение с информацией о пользователе
         """
         user_upgrade: dict = await Season().get_upgrade_point(user)
-        reward_data: RewardData = await DataMethods().reward()
-        # await bot.send_message(
-        #     chat_id=user.user_id,
-        #     text=texts.Btns.profile,
-        #     reply_markup=await reply.main_menu(user)
-        # )
-        await bot.send_photo(
-            chat_id=user.user_id,
-            photo=photo_id,
-            caption=texts.Profile.Texts.info.format(
+        
+        if isinstance(message, types.Message):
+            message_id = message.message_id
+        else:
+            message_id = message.message.message_id
+
+        await MessageManager(
+            message,
+            user.user_id
+        ).send_or_edit(
+            texts.Profile.Texts.info.format(
                 upgrade_emoji=user_upgrade.emoji,
                 upgrade_name=user_upgrade.name,
                 msg_id=message_id + 1,
@@ -69,45 +75,54 @@ class Profile:
                     user.user_id, user.nickname, user.name, user.supername
                 ),
                 starcoins=user.starcoins,
+                bot_name=bot_name
+            ) + (
+                texts.Profile.Texts.buy_false if user.purch_ban else texts.Profile.Texts.buy_true
+            ) + texts.Profile.Texts.minultiacc,
+            await inline.back_to_main(),
+            "profile"
+        )
+
+    async def invite_friend_info(
+        self,
+        call: types.CallbackQuery,
+        user: Users
+        ) -> None:
+        reward_data: RewardData = await DataMethods().reward()
+
+        await MessageManager(
+            call,
+            user.user_id
+        ).send_or_edit(
+            texts.Profile.Texts.referal.format(
                 add_referal=reward_data.starcoins_for_referal,
                 add_referer=reward_data.starcoins_for_referer,
                 referral_count=await UserMethods().get_referral_count(user.user_id),
                 user_id=user.user_id,
-                bot_name=bot_name,
+                bot_name=bot_name
             ),
-            reply_markup=await reply.main_menu(user),
-            # reply_markup=await inline.refresh_info(),
-            # disable_web_page_preview=True
+            await inline.back_to_main(),
+            "invite_friend"
         )
 
-    # async def refresh_info_msg(
-    #     self,
-    #     call: types.CallbackQuery,
-    #     user: Users
-    #     ) -> None:
-    #     await call.bot.delete_messages(
-    #         chat_id=call.from_user.id,
-    #         message_ids=[
-    #             call.message.message_id - 1,
-    #             call.message.message_id
-    #         ]
-    #     )
-    #     await self.user_info_msg(
-    #         call.bot,
-    #         user,
-    #         call.message.message_id
-    #     )
-
-    async def user_help_msg(self, bot: Bot, user: Users) -> None:
+    async def user_help_msg(self, user: Users, message: types.Message) -> None:
         """
         Отправляем сообщение с информацией о пользователе
         """
-        await bot.send_message(
-            chat_id=user.user_id,
-            text=texts.Texts.help,
-            reply_markup=await reply.main_menu(user) if user.authorised else None,
-            disable_web_page_preview=True,
+        await MessageManager(
+            message,
+            user.user_id
+        ).send_or_edit(
+            texts.Texts.help,
+            await inline.back_to_main() if user.authorised else None,
+            "help"
         )
+        # await bot.send_message(
+        #     chat_id=user.user_id,
+        #     text=texts.Texts.help,
+        #     reply_markup=await selector.main_menu(user) if user.authorised else None,
+        #     disable_web_page_preview=True,
+        # )
 
     async def find_user(
         self, user_id: int
@@ -191,53 +206,40 @@ class Profile:
         """
         Откатываем регистрацию.
         """
+        user = await UserMethods().get_by_user_id(target_user_id)
+        user = await UserMethods().complete_registration(
+            user,
+            state_data={
+                "role": user.role_private,
+                "gender": user.gender,
+                "age": user.age,
+                "name": None,
+                "supername": None,
+                "nickname": None,
+                "phone": None,
+                "authorised": False,
+                "authorised_at": None,
+            },
+            rollback=True,
+        )
+
+        text, keyboard = await self.find_user(target_user_id)
         try:
-            user = await UserMethods().get_by_user_id(target_user_id)
-            user = await UserMethods().complete_registration(
-                user,
-                state_data={
-                    "role": user.role_private,
-                    "gender": user.gender,
-                    "age": user.age,
-                    "name": None,
-                    "supername": None,
-                    "nickname": None,
-                    "phone": None,
-                    "authorised": False,
-                    "authorised_at": None,
-                },
-                rollback=True,
+            await call.message.edit_text(text=text, reply_markup=keyboard)
+        except: # exceptions.TelegramBadRequest
+            await call.message.bot.send_message(
+                chat_id=call.from_user.id, text=text, reply_markup=keyboard
             )
-
-            text, keyboard = await self.find_user(target_user_id)
-            try:
-                await call.message.edit_text(text=text, reply_markup=keyboard)
-            except:
-                await call.message.bot.send_message(
-                    chat_id=call.from_user.id, text=text, reply_markup=keyboard
-                )
-                await call.message.delete()
-
-        except Exception as ex:
-            logger.exception(str(ex))
-            return str(texts.Error.Notif.no_change_balance).format(
-                str(ex.__class__.__name__)
-            )
+            await call.message.delete()
 
     async def change_user_balance(self, user_id: int, new_balance: float) -> str:
         """
         Изменяем баланс старкоинов пользователя.
         """
-        try:
-            new_starcoins = await UserMethods().update_balance(user_id, new_balance)
-            if not new_starcoins:
-                raise Exception(f"Response = {str(new_starcoins)}")
-            return str(texts.Admin.Texts.new_balance_this).format(new_starcoins)
-        except Exception as ex:
-            logger.exception(str(ex))
-            return str(texts.Error.Notif.no_change_balance).format(
-                str(ex.__class__.__name__)
-            )
+        new_starcoins = await UserMethods().update_balance(user_id, new_balance)
+        if not new_starcoins:
+            raise Exception(f"Response = {str(new_starcoins)}")
+        return str(texts.Admin.Texts.new_balance_this).format(new_starcoins)
 
     async def get_banned_users(
         self,
@@ -333,7 +335,7 @@ class Profile:
                             title=purchas.title, description=purchas.description
                         ),
                     )
-                except Exception as ex:
+                except Exception as ex: # exceptions.TelegramBadRequest
                     logger.exception(str(ex))
         else:
             logger.error(f"Response = {purchas}")
@@ -457,7 +459,7 @@ class Profile:
                 logger.error(f"Сработало исключение!!!\n!!!{ex}")
                 # await asyncio.sleep(ex.retry_after)
                 continue
-            except Exception as ex:
+            except Exception as ex: # exceptions.TelegramBadRequest
                 logger.error(f"Сработало исключение!!!\n!!!{ex}")
                 continue
         await message.bot.edit_message_text(

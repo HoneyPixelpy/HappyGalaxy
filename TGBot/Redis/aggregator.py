@@ -141,3 +141,19 @@ class MessageAggregator(RedisAggregator):
 class QuestAggregator(MessageAggregator):
     def __init__(self):
         super().__init__()
+
+
+class ShopAggregator(MessageAggregator):
+    def __init__(self):
+        super().__init__()
+        
+    async def add_message(
+        self, message: types.Message, state: FSMContext
+    ) -> Dict[str, List[Any]]:
+        state_data = {"content": "any"}
+        return await super().add_message(
+            message.from_user.id,
+            message,
+            state,
+            state_data
+            )

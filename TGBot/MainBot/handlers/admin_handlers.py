@@ -9,21 +9,14 @@ from MainBot.base.forms import Sigma_BoostsForms
 from MainBot.base.models import Users
 from MainBot.filters.chat_types import ChatTypeFilter, IsAdmin
 from MainBot.handlers.message_handlers import text_over
-from MainBot.keyboards.reply import KB as reply
+from MainBot.keyboards import reply
 from MainBot.state.state import CreateBonus, FindUser, Mailing
-from MainBot.utils.Forms import BonusBoosters, PersonalForms, Profile, Shop
+from MainBot.utils.Forms import BonusBoosters, PersonalForms, Profile, Menu
 from MainBot.utils.MyModule import Func
-from config import shop_chat
+
 
 admin_router = Router(name=__name__)
 admin_router.message.filter(IsAdmin(), ChatTypeFilter(["private"]))
-
-
-@admin_router.message(F.chat.id == shop_chat, F.reply_to_message)
-async def admin_reply_handler(message: types.Message):
-    answer_message_id = message.reply_to_message.message_id
-    logger.debug(answer_message_id)
-    await Shop().answer_buy(message, answer_message_id)
 
 
 @admin_router.message(
@@ -126,7 +119,7 @@ async def find_user_id(message: types.Message, state: FSMContext):
             await message.bot.delete_message(
                 message.from_user.id, data.get("message_id")
             )
-        except:
+        except: # exceptions.TelegramBadRequest
             pass
     if message.text == str(texts.Admin.Btns.back_to_admin):
         await message.answer(
@@ -136,7 +129,7 @@ async def find_user_id(message: types.Message, state: FSMContext):
         return
     try:
         find_user_id = int(message.text)
-    except:
+    except: # TypeError
         await message.answer(str(texts.Error.Notif.get_number))
         return
 
@@ -176,7 +169,7 @@ async def find_send_msg(message: types.Message, state: FSMContext):
             await message.bot.delete_message(
                 message.from_user.id, data.get("message_id")
             )
-        except:
+        except: # exceptions.TelegramBadRequest
             pass
     if message.text == str(texts.Admin.Btns.back_to_admin):
         await state.clear()
@@ -236,7 +229,7 @@ async def find_change_balance(message: types.Message, state: FSMContext):
             await message.bot.delete_message(
                 message.from_user.id, data.get("message_id")
             )
-        except:
+        except: # exceptions.TelegramBadRequest
             pass
     if message.text == str(texts.Admin.Btns.back_to_admin):
         await state.clear()
@@ -254,7 +247,7 @@ async def find_change_balance(message: types.Message, state: FSMContext):
 
     try:
         new_balance = float(message.text.replace(",", "."))
-    except:
+    except: # TypeError
         await message.answer(str(texts.Error.Notif.get_number))
         return
 
@@ -338,7 +331,7 @@ async def Mailing_Pin(message: types.Message, state: FSMContext):
             await message.bot.delete_message(
                 message.from_user.id, data.get("message_id")
             )
-        except:
+        except: # exceptions.TelegramBadRequest
             pass
     message_now = await message.bot.send_message(
         chat_id=message.from_user.id,
@@ -428,7 +421,7 @@ async def Mailing_Media(message: types.Message, state: FSMContext):
                 await message.bot.delete_message(
                     message.from_user.id, data.get("message_id")
                 )
-            except:
+            except: # exceptions.TelegramBadRequest
                 pass
 
         message_now = await message.bot.send_message(
@@ -462,7 +455,7 @@ async def Mailing_Text(message: types.Message, state: FSMContext, user: Users):
                 await message.bot.delete_message(
                     message.from_user.id, data.get("message_id")
                 )
-            except:
+            except: # exceptions.TelegramBadRequest
                 pass
         mailing_func: Coroutine[Any, Any, None] = (
             await Func.constructor_func_to_mailing_one_msg(
@@ -506,7 +499,7 @@ async def Mailing_Confirm(message: types.Message, state: FSMContext):
                 await message.bot.delete_message(
                     message.from_user.id, data.get("message_id")
                 )
-            except:
+            except: # exceptions.TelegramBadRequest
                 pass
         mailing_func = data["mailing_func"]
 
@@ -609,38 +602,41 @@ async def text_admin(message: types.Message, state: FSMContext, user: Users):
         await message.answer(
             texts.Admin.Texts.main, reply_markup=await reply.amdin_markup()
         )
-    elif message.text == str(texts.Admin.Btns.back_to_main):
-        user = await Sigma_BoostsForms().add_passive_income(user)
-        await Profile().user_info_msg(message.bot, user, message.message_id)
-    elif message.text == str(texts.Admin.Btns.back_to_admin):
-        await message.answer(
-            texts.Admin.Texts.main, reply_markup=await reply.amdin_markup()
-        )
-    elif message.text == str(texts.Admin.Btns.find_user):
-        await state.set_state(FindUser.user_id)
-        message_now = await message.bot.send_message(
-            message.from_user.id,
-            text=str(texts.Admin.FindUser.start_text),
-            reply_markup=await reply.back_to_amdin_markup(),
-        )
-        await state.update_data(message_id=message_now.message_id)
-    elif message.text == str(texts.Admin.Btns.mailing):
-        message_now = await message.bot.send_message(
-            chat_id=message.from_user.id,
-            text=str(texts.Admin.Mailing.step_one),
-            reply_markup=await reply.Pin_Mailing_markup(),
-        )
-        await state.set_state(Mailing.Pin)
-        await state.update_data(message_id=message_now.message_id)
-    elif message.text == str(texts.Admin.Btns.all_tasks):
-        async for text, keyboard in Profile().get_all_output_tasks():
-            await message.bot.send_message(
-                message.from_user.id, text=text, reply_markup=keyboard
+    match message.text:
+        case str(texts.Admin.Btns.back_to_main):
+            await Menu().main_menu(
+                message,
+                user
             )
-    elif message.text == str(texts.Admin.Btns.generate_key):
-        text = await PersonalForms().generate_key()
-        await message.answer(text)
-    elif message.text == str(texts.Admin.Btns.bonus_boost):
-        await BonusBoosters().type_bonus(message, user, state)
+        case str(texts.Admin.Btns.back_to_admin):
+            await message.answer(
+                texts.Admin.Texts.main, reply_markup=await reply.amdin_markup()
+            )
+        case str(texts.Admin.Btns.find_user):
+            await state.set_state(FindUser.user_id)
+            message_now = await message.bot.send_message(
+                message.from_user.id,
+                text=str(texts.Admin.FindUser.start_text),
+                reply_markup=await reply.back_to_amdin_markup(),
+            )
+            await state.update_data(message_id=message_now.message_id)
+        case str(texts.Admin.Btns.mailing):
+            message_now = await message.bot.send_message(
+                chat_id=message.from_user.id,
+                text=str(texts.Admin.Mailing.step_one),
+                reply_markup=await reply.Pin_Mailing_markup(),
+            )
+            await state.set_state(Mailing.Pin)
+            await state.update_data(message_id=message_now.message_id)
+        case str(texts.Admin.Btns.all_tasks):
+            async for text, keyboard in Profile().get_all_output_tasks():
+                await message.bot.send_message(
+                    message.from_user.id, text=text, reply_markup=keyboard
+                )
+        case str(texts.Admin.Btns.generate_key):
+            text = await PersonalForms().generate_key()
+            await message.answer(text)
+        case str(texts.Admin.Btns.bonus_boost):
+            await BonusBoosters().type_bonus(message, user, state)
 
-    await text_over(message, state, user)
+    await text_over(message, user)

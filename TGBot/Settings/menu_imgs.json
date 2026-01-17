@@ -1,0 +1,38 @@
+{
+    "menu": {
+        "main" : "AgACAgIAAxkBAAEdKzxpVB0VSz5O0h0a_R-7M5otHY5qhgACLhJrG6m2oUrWPjS61efy6AEAAwIAA3kAAzgE",
+        "test" : "AgACAgIAAxkBAAKI2GlUIm7LqRmwjLkS7b1iNwk-XpiQAAIuEmsbqbahSrPYFCrK8k3jAQADAgADeQADOAQ"
+    },
+    "profile": {
+        "main" : "AgACAgIAAxkBAAEdK4ppVB3LgIx0chDCPMCXlAv6isooHAACMBJrG6m2oUpKg16GBEPwlgEAAwIAA3kAAzgE",
+        "test" : "AgACAgIAAxkBAAKI0mlUIl9PnfJIFPcS7WzNZaj_9uhRAAIwEmsbqbahSiPq42Uog0PXAQADAgADeQADOAQ"
+    },
+    "rang": {
+        "main" : "AgACAgIAAxkBAAEdK5hpVB3ilD02uTMeMd9-Yx2IIqq7ugACMRJrG6m2oUr20_-iQ84GIgEAAwIAA3kAAzgE",
+        "test" : "AgACAgIAAxkBAAKI5GlUIpE3TXgAASXYmr4AAZdVBxm3DBsAAjESaxuptqFKhc3uIxA9_XgBAAMCAAN5AAM4BA"
+    },
+    "game": {
+        "main" : "AgACAgIAAxkBAAEdK6BpVB368N8X7qS_P7VE7cljbuF2KwACMxJrG6m2oUrieXpVZIMQUAEAAwIAA3kAAzgE",
+        "test" : "AgACAgIAAxkBAAKI1WlUImfCZK4eItI92IM_Mmb3wfQWAAIzEmsbqbahSsOdg4NsaUe6AQADAgADeQADOAQ"
+    },
+    "quests": {
+        "main" : "AgACAgIAAxkBAAEfCRFpXWsJWW-AHIPU3JUGRsJaCQZmOwACWwxrG2CC8UqwO8is2esXJAEAAwIAA3kAAzgE",
+        "test" : "AgACAgIAAxkBAAKLUGldayORPfKIWCteitxFM0kHsio7AAJbDGsbYILxSqfzUrl2cu83AQADAgADeQADOAQ"
+    },
+    "rating": {
+        "main" : "AgACAgIAAxkBAAEdK-JpVB6ltxnaIPd4utIQqeuRPiJBVAACORJrG6m2oUqoy6Oci68bdgEAAwIAA3kAAzgE",
+        "test" : "AgACAgIAAxkBAAKI22lUInZRQhHrAoREO26ZR_w4ay4uAAI5EmsbqbahSs6YEInwaE1xAQADAgADeQADOAQ"
+    },
+    "help": {
+        "main" : "AgACAgIAAxkBAAEdK7FpVB4rAff-BM3ya0NoPjwiE8uXqQACNRJrG6m2oUrmT4CdMlZ50gEAAwIAA3kAAzgE",
+        "test" : "AgACAgIAAxkBAAKI4WlUIoq4xxntFqU9q6C4BQaKC5WAAAI1EmsbqbahSu57wDAtB1zFAQADAgADeQADOAQ"
+    },
+    "shop": {
+        "main" : "AgACAgIAAxkBAAEdK8BpVB5FRxE35N-P3TAIaL49lCe4TwACNxJrG6m2oUqTPsZhL-fS_wEAAwIAA3kAAzgE",
+        "test" : "AgACAgIAAxkBAAKI52lUIppkI2LP5QyVcm8QHX1SNeEtAAI3EmsbqbahSsAWd5KOidgHAQADAgADeQADOAQ"
+    },
+    "invite_friend": {
+        "main" : "AgACAgIAAxkBAAEdK9FpVB5bNMldoQxAoen-B9VU7FSD5AACOBJrG6m2oUphVVQ5Wti80QEAAwIAA3kAAzgE",
+        "test" : "AgACAgIAAxkBAAKI3mlUIoD_pvyMYnqkOZiFV-YJH42cAAI4EmsbqbahSurYeXvHRgIHAQADAgADeQADOAQ"
+    }
+}

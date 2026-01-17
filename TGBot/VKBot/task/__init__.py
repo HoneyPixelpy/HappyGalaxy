@@ -27,7 +27,7 @@ async def task_check():
         finally:
             # Корректное завершение
             await asyncio.gather(vk_checker.stop(), tg_checker.stop())
-    except:
+    except: # Safe
         logger.exception("Что-то с задачами на проверку подписок")
 
 

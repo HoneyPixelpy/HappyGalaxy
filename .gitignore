@@ -9,7 +9,6 @@ __pycache__
 TGBot/GPTBot/limits.json
 TGBot/MainBot/utils/Games/GeoHunt/Data/geo.json
 celerybeat-schedule
-docker-compose.yml
 Django/bot/migrations/*py
 */.vscode
 *.excalidraw

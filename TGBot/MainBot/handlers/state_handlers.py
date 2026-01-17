@@ -4,11 +4,9 @@ import texts
 from aiogram import F, Router, types
 from aiogram.fsm.context import FSMContext
 from loguru import logger
-from MainBot.base.forms import Sigma_BoostsForms
 from MainBot.base.models import Users
 from MainBot.filters.chat_types import ChatTypeFilter
-from MainBot.keyboards.inline import IKB as inline
-from MainBot.keyboards.reply import KB as reply
+from MainBot.keyboards import inline, reply, selector
 from MainBot.state.state import (
     Auth_state,
     Daily,
@@ -23,7 +21,7 @@ from MainBot.state.state import (
 from MainBot.utils.Forms import (
     Authorisation,
     PersonalForms,
-    Profile,
+    Menu,
     Promocodes,
     Quests,
     Shop,
@@ -266,8 +264,10 @@ async def RegPersonal_phone(message: types.Message, state: FSMContext, user: Use
 async def Offer_shop(message: types.Message, state: FSMContext, user: Users):
     if message.text == texts.Btns.back:
         await state.clear()
-        user = await Sigma_BoostsForms().add_passive_income(user)
-        await Profile().user_info_msg(message.bot, user, message.message_id)
+        await Menu().main_menu(
+            message,
+            user
+        )
     else:
         await Shop().send_offer(message, state, user)
 
@@ -290,7 +290,7 @@ async def VKProfile_url(message: types.Message, state: FSMContext, user: Users):
     if message.text == texts.Btns.back:
         await state.clear()
         await message.answer(
-            text=texts.Texts.start, reply_markup=await reply.main_menu(user)
+            text=texts.Texts.start, reply_markup=await selector.main_menu(user)
         )
         await Quests().viue_all(user, message=message)
     else:
@@ -328,7 +328,7 @@ async def SPromocodes_wait(message: types.Message, state: FSMContext, user: User
     if message.text == texts.Btns.back:
         await state.clear()
         await message.answer(
-            text=texts.Texts.start, reply_markup=await reply.main_menu(user)
+            text=texts.Texts.start, reply_markup=await selector.main_menu(user)
         )
     else:
         await Promocodes().activate(message, state, user)
@@ -341,7 +341,7 @@ async def SInteractiveGame_wait_data(
     await message.bot.send_message(
         chat_id=user.user_id,
         text=texts.Texts.start,
-        reply_markup=await reply.main_menu(user),
+        reply_markup=await selector.main_menu(user),
     )
     if message.text == texts.Btns.back:
         await state.clear()
@@ -353,32 +353,17 @@ async def SInteractiveGame_wait_data(
 
 @state_router.message(Offer.instruction)
 async def Offer_shop(message: types.Message, state: FSMContext, user: Users):
-    if message.text == texts.Btns.back:
-        data = await state.get_data()
-        await state.clear()
-        await Shop().get_product(message, user, data["product_id"])
-    else:
-        if len(message.text) > 600:
-            await message.bot.send_message(
-                chat_id=user.user_id,
-                text=texts.Shop.Error.delivery_data_too_long,
-                reply_markup=await reply.back()
-            )
-            return
-        
-        data = await state.get_data()
-        await state.clear()
-        
-        user = await Sigma_BoostsForms().add_passive_income(user)
-        status, error_msg_or_product = await Shop().check_possibility_purchase(
-            user, data["product_id"]
+    # if message.text == texts.Btns.back:
+    #     data = await state.get_data()
+    #     await state.clear()
+    #     await Shop().get_product(message, user, data["product_id"])
+    # else:
+    if len(message.text) > 600:
+        await message.bot.send_message(
+            chat_id=user.user_id,
+            text=texts.Shop.Error.delivery_data_too_long,
+            reply_markup=await reply.back()
         )
-        if status:
-            await Shop().buy_product(message, user, error_msg_or_product, message.text)
-        else:
-            try:
-                await message.answer(text=error_msg_or_product)
-            except:
-                await message.bot.send_message(
-                    chat_id=user.user_id, text=error_msg_or_product
-                )
+        return
+    
+    await Shop().confirm_buy(message, state, user, message.text)
