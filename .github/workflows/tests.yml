@@ -19,7 +19,30 @@ jobs:
         with:
           version: 'latest'
 
-
+      - name: Test secrets directly
+        run: |
+          echo "Testing if secrets are accessible..."
+          
+          # Пробуем получить каждую переменную
+          echo "1. ALLOWED_HOSTS exists: ${{ secrets.ALLOWED_HOSTS != '' }}"
+          echo "2. POSTGRES_DB exists: ${{ secrets.POSTGRES_DB != '' }}"
+          echo "3. POSTGRES_USER exists: ${{ secrets.POSTGRES_USER != '' }}"
+          
+          # Пробуем записать в файл
+          echo "ALLOWED_HOSTS=${{ secrets.ALLOWED_HOSTS }}" > test.env
+          echo "POSTGRES_USER=${{ secrets.POSTGRES_USER }}" >> test.env
+          
+          echo "=== Contents of test.env ==="
+          cat test.env
+          
+          echo "=== Checking file size ==="
+          ls -la test.env
+          echo "Number of lines: $(wc -l < test.env)"
+        env:
+          # Явно передаем переменные окружения в step
+          TEST_HOSTS: ${{ secrets.ALLOWED_HOSTS }}
+          TEST_DB: ${{ secrets.POSTGRES_DB }}
+          
       - name: Create .env file
         run: |
           # Все секреты доступны через
