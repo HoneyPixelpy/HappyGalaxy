@@ -48,7 +48,7 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Start containers
-        run: docker compose --env-file .env up -d django analytic_consumer
+        run: docker compose up -d django analytic_consumer
 
       - name: Run pytest in Django container
         run: docker compose exec django pytest -v --nomigrations --reuse-db
