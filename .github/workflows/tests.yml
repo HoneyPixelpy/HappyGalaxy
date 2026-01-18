@@ -47,7 +47,10 @@ jobs:
         run: docker compose up -d django analytic_consumer
 
       - name: Run Django migrations
-        run: docker compose exec django python manage.py migrate
+        run: |
+          docker compose exec django python manage.py makemigrations
+          docker compose exec django python manage.py migrate
+
 
       - name: Run pytest in Django container
         run: docker compose exec django pytest
