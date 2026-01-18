@@ -51,7 +51,7 @@ jobs:
         run: docker compose up -d django analytic_consumer
 
       - name: Run pytest in Django container
-        run: docker compose exec django pytest -v
+        run: docker compose exec django pytest
 
       - name: Cleanup
         if: always()
