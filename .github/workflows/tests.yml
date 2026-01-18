@@ -39,15 +39,34 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-      
+
+      - name: Create .env ✅
+        run: |
+          cat > .env << EOF
+          SECRET_KEY=django-insecure-test-key-change-me
+          DEBUG=1
+          ALLOWED_HOSTS=localhost,127.0.0.1,::1,test
+          POSTGRES_DB=${{ secrets.POSTGRES_DB }}
+          POSTGRES_USER=${{ secrets.POSTGRES_USER }}
+          POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
+          POSTGRES_HOST=postgres
+          POSTGRES_PORT=5432
+          REDIS_URL=${{ secrets.REDIS_URL }}
+          MAIN_TOKEN=test123
+          MAIN_PROXY=""
+          EOF
+          cat .env
+  
       - name: Setup Docker
         uses: docker/setup-buildx-action@v3
 
-      - name: Printenv
-        uses: printenv > env.list
-
       - name: Start containers
-        run: docker compose --env-file .env up -d django analytic_consumer
+        run: |
+          docker compose --env-file .env up -d django analytic_consumer
+          sleep 15
+          
+          # Проверяем готовность
+          docker compose exec postgres pg_isready -U test_user || exit 1
 
       - name: Django makemigrations
         run: docker compose exec django python manage.py makemigrations
