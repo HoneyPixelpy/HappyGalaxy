@@ -22,15 +22,30 @@ jobs:
         run: |
           # Все секреты доступны через
           cat > .env << EOF
-          ALLOWED_HOSTS=${{ secrets.ALLOWED_HOSTS }}
-          REDIS_URL=${{ secrets.REDIS_URL }}
-          SECRET_KEY=${{ secrets.SECRET_KEY }}
-          POSTGRES_DB=${{ secrets.POSTGRES_DB }}
-          POSTGRES_USER=${{ secrets.POSTGRES_USER }}
-          POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
-          POSTGRES_HOST=${{ secrets.POSTGRES_HOST }}
-          POSTGRES_PORT=${{ secrets.POSTGRES_PORT }}
-          DEBUG=${{ secrets.DEBUG }}
+          ALLOWED_HOSTS: ${{ secrets.ALLOWED_HOSTS }}
+          REDIS_URL: ${{ secrets.REDIS_URL }}
+          REDIS_PASSWORD: ${{ secrets.REDIS_PASSWORD }}
+          SECRET_KEY: ${{ secrets.SECRET_KEY }}
+          POSTGRES_DB: ${{ secrets.POSTGRES_DB }}
+          POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          POSTGRES_HOST: ${{ secrets.POSTGRES_HOST }}
+          POSTGRES_PORT: ${{ secrets.POSTGRES_PORT }}
+          DEBUG: ${{ secrets.DEBUG }}
+          RABBITMQ_HOST: ${{ secrets.RABBITMQ_HOST }}
+          RABBITMQ_PORT: ${{ secrets.RABBITMQ_PORT }}
+          RABBITMQ_USER: ${{ secrets.RABBITMQ_USER }}
+          RABBITMQ_PASSWORD: ${{ secrets.RABBITMQ_PASSWORD }}
+          MAIN_TEST_TOKEN: ${{ secrets.MAIN_TEST_TOKEN }}
+          MAIN_BASE_TOKEN: ${{ secrets.MAIN_BASE_TOKEN }}
+          BOT_NAME: ${{ secrets.BOT_NAME }}
+          PHOTO_ID: ${{ secrets.PHOTO_ID }}
+          GPTBOT_TEST_TOKEN: ${{ secrets.GPTBOT_TEST_TOKEN }}
+          GPTBOT_BASE_TOKEN: ${{ secrets.GPTBOT_BASE_TOKEN }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_PROXY: ${{ secrets.OPENAI_PROXY }}
+          SERVICE_TEST_TOKEN: ${{ secrets.SERVICE_TEST_TOKEN }}
+          SERVICE_BASE_TOKEN: ${{ secrets.SERVICE_BASE_TOKEN }}
           EOF
           
           echo "=== .env file created ==="
