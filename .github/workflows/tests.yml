@@ -58,6 +58,7 @@ jobs:
         run: |
           # Применяем миграции для тестовой БД
           docker compose exec django python manage.py migrate --noinput
+          sleep 10
 
       - name: Run pytest in Django container
         run: |
