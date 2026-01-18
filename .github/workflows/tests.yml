@@ -44,27 +44,14 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Start containers
-        run: |
-          docker compose up -d django analytic_consumer
-
-          sleep 10
-
-          echo "Waiting for PostgreSQL to be ready..."
-          timeout 60s bash -c 'until docker compose exec postgres pg_isready -U ${POSTGRES_USER:-postgres}; do sleep 2; done'
-
-          docker compose ps
+        run: docker compose up -d django analytic_consumer
 
       - name: Run Django migrations
-        run: |
-          # Применяем миграции для тестовой БД
-          docker compose exec django python manage.py migrate --noinput
-          sleep 10
+        run: docker compose exec django python manage.py migrate
 
       - name: Run pytest in Django container
-        run: |
-          docker compose exec django pytest
+        run: docker compose exec django pytest
 
       - name: Cleanup
         if: always()  # Выполнять даже если тесты упали
-        run: |
-          docker compose down -v
+        run: docker compose down -v
