@@ -68,14 +68,10 @@ jobs:
           # Проверяем готовность
           docker compose exec postgres pg_isready -U test_user || exit 1
 
-      - name: Django makemigrations
-        run: docker compose exec django python manage.py makemigrations
-
-      - name: Django migrate
-        run: docker compose exec django python manage.py migrate
-
       - name: Run pytest in Django container
-        run: docker compose exec django pytest
+        run: docker compose exec django pytest -v \
+          --nomigrations \
+          --reuse-db
 
       - name: Cleanup
         if: always()  # Выполнять даже если тесты упали
