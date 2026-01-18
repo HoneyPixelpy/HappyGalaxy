@@ -61,15 +61,10 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Start containers
-        run: |
-          docker compose --env-file .env up -d django analytic_consumer
-          sleep 15
-          
-          # Проверяем готовность
-          docker compose exec postgres pg_isready -U test_user || exit 1
+        run: docker compose --env-file .env up -d django analytic_consumer
 
       - name: Run pytest in Django container
-        run: docker compose exec django pytest -v --nomigrations --reuse-db tests/
+        run: docker compose exec django pytest -v --nomigrations --reuse-db
 
       - name: Cleanup
         if: always()  # Выполнять даже если тесты упали
